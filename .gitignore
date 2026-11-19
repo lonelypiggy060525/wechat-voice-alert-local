@@ -9,3 +9,4 @@ exe_sess.json
 *.log
 shot_*.png
 wechatauto_logs/
+RELEASE_NOTES.md
