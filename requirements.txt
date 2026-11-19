@@ -1,0 +1,5 @@
+wechatauto-replica>=1.2.10
+edge-tts>=6.1.10
+pystray>=0.19.5
+pillow>=10.0.0
+pywin32>=306

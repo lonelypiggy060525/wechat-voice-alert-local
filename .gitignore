@@ -1,0 +1,11 @@
+.venv/
+build/
+dist/
+__pycache__/
+*.pyc
+*.spec
+sess.json
+exe_sess.json
+*.log
+shot_*.png
+wechatauto_logs/
