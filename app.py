@@ -179,6 +179,8 @@ class App(tk.Tk):
         self.watcher: wechat_list.ChatListWatcher | None = None
         self.hotkeys = hotkey_mod.HotkeyManager(lambda: self.queue.put(("stop", None)))
         self._announce_token = 0
+        self._last_spoken_sender = ""
+        self._last_spoken_at = 0.0
         self._announce_q: queue.Queue = queue.Queue()
         threading.Thread(target=self._announce_worker, name="announcer", daemon=True).start()
         self._save_job = None
@@ -920,12 +922,18 @@ class App(tk.Tk):
             limit = max(limit, 400)
         if len(text) > limit:
             text = text[:limit] + "…"
+        # 同一个人连着发：后面的只念正文，不再重复「某某说」
+        short = tts_engine.clean_for_speech(content)
+        if len(short) > limit:
+            short = short[:limit] + "…"
 
         path = ""
         if self.cfg.sound_enabled:
             path = sound_player.resolve_sound(self._current_sound_path()) or ""
         item = {
             "text": text,
+            "text_short": short,
+            "sender": sender,
             "sound": path,
             "sound_vol": float(self.vol_slider.get()),
             "tts_on": bool(self.tts_enabled_var.get()),
@@ -945,6 +953,12 @@ class App(tk.Tk):
                 continue
             if item["token"] != self._announce_token:
                 continue                        # stopped while it was waiting
+            now = time.monotonic()
+            repeat = (item.get("sender")
+                      and item["sender"] == self._last_spoken_sender
+                      and now - self._last_spoken_at <= 20.0)
+            if repeat:
+                item = dict(item, sound="", text=item.get("text_short") or item["text"])
             if item["sound"]:
                 try:
                     self.player.play(item["sound"], item["sound_vol"])
@@ -963,6 +977,8 @@ class App(tk.Tk):
                 self.tts.speak(item["text"], replace=False)
             except Exception:
                 continue
+            self._last_spoken_sender = item.get("sender", "")
+            self._last_spoken_at = time.monotonic()
             # block until this clip has actually finished before starting the next one
             while self.tts.busy() and item["token"] == self._announce_token:
                 time.sleep(0.1)
