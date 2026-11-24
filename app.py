@@ -30,20 +30,28 @@ HERE = os.path.dirname(sys.executable) if FROZEN else os.path.dirname(os.path.ab
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "WeChatDBAlert"
 
-BG = "#F4F6F8"
-CARD = "#FFFFFF"
-BORDER = "#E4E7EB"
-TEXT = "#14181F"
-MUTED = "#6B7280"
-ACCENT = "#07C160"
-ACCENT_DARK = "#059B4C"
-ACCENT_SOFT = "#E8F8EF"
-DANGER = "#C0392B"
-DANGER_SOFT = "#FDECEC"
+# 深色配色（参考「岛仔」的暗色系：近黑底、低饱和描边、蓝色主色、绿=在线/红=警告）
+BG = "#0D0D10"
+CARD = "#151518"
+CARD_HOVER = "#1C1C21"
+FIELD = "#101013"
+BORDER = "#26262C"
+TEXT = "#F2F3F5"
+MUTED = "#9C9EA8"
+DIM = "#6E7079"
+ACCENT = "#3EACF8"
+ACCENT_DARK = "#2F8FD4"
+ACCENT_SOFT = "#10293B"
+DANGER = "#F23046"
+DANGER_SOFT = "#3A1116"
+GREEN = "#30D158"
+GREEN_SOFT = "#0F2A1B"
+ON_ACCENT = "#04121C"
 
 FONT = ("Microsoft YaHei UI", 10)
 FONT_SMALL = ("Microsoft YaHei UI", 9)
-FONT_TITLE = ("Microsoft YaHei UI", 13, "bold")
+FONT_TINY = ("Microsoft YaHei UI", 8)
+FONT_TITLE = ("Microsoft YaHei UI", 12, "bold")
 FONT_H1 = ("Microsoft YaHei UI", 15, "bold")
 FONT_NAV = ("Microsoft YaHei UI", 10)
 
@@ -162,11 +170,11 @@ class Slider(tk.Canvas):
     def _draw(self) -> None:
         self.delete("all")
         y = self._ch - 9
-        round_rect(self, 0, y - 3, self._cw, y + 3, 3, fill="#E9EDF2", outline="")
+        round_rect(self, 0, y - 3, self._cw, y + 3, 3, fill="#242429", outline="")
         x = self._x_of(self._value)
         if x > 2:
             round_rect(self, 0, y - 3, x, y + 3, 3, fill=ACCENT, outline="")
-        self.create_oval(x - 8, y - 8, x + 8, y + 8, fill="white", outline=ACCENT, width=2)
+        self.create_oval(x - 8, y - 8, x + 8, y + 8, fill=CARD, outline=ACCENT, width=2)
 
 
 class App(tk.Tk):
@@ -228,38 +236,63 @@ class App(tk.Tk):
             style.theme_use("clam")
         except tk.TclError:
             pass
-        style.configure(".", font=FONT, background=BG)
+        self.option_add("*TCombobox*Listbox.background", FIELD)
+        self.option_add("*TCombobox*Listbox.foreground", TEXT)
+        self.option_add("*TCombobox*Listbox.selectBackground", ACCENT_SOFT)
+        self.option_add("*TCombobox*Listbox.selectForeground", TEXT)
+        style.configure(".", font=FONT, background=BG, foreground=TEXT)
         style.configure("TFrame", background=CARD)
         style.configure("TLabel", background=CARD, foreground=TEXT, font=FONT)
         style.configure("Muted.TLabel", background=CARD, foreground=MUTED, font=FONT_SMALL)
         style.configure("CardTitle.TLabel", background=CARD, foreground=TEXT, font=FONT_TITLE)
         style.configure("TCheckbutton", background=CARD, foreground=TEXT, font=FONT)
         style.map("TCheckbutton", background=[("active", CARD)],
-                  indicatorcolor=[("selected", ACCENT), ("!selected", "#FFFFFF")])
+                  indicatorcolor=[("selected", ACCENT), ("!selected", "#2A2A31")],
+                  foreground=[("disabled", DIM)])
         style.configure("TRadiobutton", background=CARD, foreground=TEXT, font=FONT)
+        style.map("TRadiobutton", background=[("active", CARD)],
+                  indicatorcolor=[("selected", ACCENT), ("!selected", "#2A2A31")])
         style.configure("TButton", font=FONT, padding=(12, 5), relief="flat",
-                        background="#F2F4F7", foreground=TEXT, borderwidth=0)
-        style.map("TButton", background=[("active", "#E7EAEF"), ("pressed", "#DDE1E7")])
-        style.configure("Accent.TButton", background=ACCENT, foreground="white", padding=(16, 6))
+                        background="#1E1E24", foreground=TEXT, borderwidth=0)
+        style.map("TButton", background=[("active", "#26262E"), ("pressed", "#2E2E37")])
+        style.configure("Accent.TButton", background=ACCENT, foreground=ON_ACCENT, padding=(16, 6))
         style.map("Accent.TButton", background=[("active", ACCENT_DARK), ("pressed", ACCENT_DARK)])
         style.configure("Ghost.TButton", background=CARD, foreground=MUTED, padding=(8, 4))
-        style.map("Ghost.TButton", background=[("active", "#F2F4F7")])
-        style.configure("TEntry", fieldbackground="white", bordercolor=BORDER, lightcolor=BORDER,
-                        darkcolor=BORDER, padding=5)
-        style.configure("TCombobox", fieldbackground="white", background="white",
-                        bordercolor=BORDER, arrowcolor=MUTED, padding=4)
-        style.map("TCombobox", fieldbackground=[("readonly", "white")],
-                  selectbackground=[("readonly", "white")], selectforeground=[("readonly", TEXT)])
-        style.configure("Horizontal.TScale", background=CARD, troughcolor="#EDEFF3", borderwidth=0)
-        style.configure("Treeview", background="white", fieldbackground="white", foreground=TEXT,
-                        rowheight=28, borderwidth=0, font=FONT)
-        style.configure("Treeview.Heading", background="#F7F8FA", foreground=MUTED,
+        style.map("Ghost.TButton", background=[("active", CARD_HOVER)])
+        style.configure("TEntry", fieldbackground=FIELD, foreground=TEXT, insertcolor=TEXT,
+                        bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER, padding=5)
+        style.map("TEntry",
+                  bordercolor=[("focus", ACCENT), ("!focus", BORDER)],
+                  lightcolor=[("focus", ACCENT), ("!focus", BORDER)],
+                  darkcolor=[("focus", ACCENT), ("!focus", BORDER)])
+        style.configure("TCombobox", fieldbackground=FIELD, background="#1E1E24", foreground=TEXT,
+                        bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER,
+                        arrowcolor=MUTED, padding=5, relief="flat")
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", FIELD), ("focus", FIELD)],
+                  background=[("active", "#26262E"), ("readonly", "#1E1E24")],
+                  foreground=[("readonly", TEXT)],
+                  selectbackground=[("readonly", FIELD)],
+                  selectforeground=[("readonly", TEXT)],
+                  bordercolor=[("focus", ACCENT), ("!focus", BORDER)],
+                  lightcolor=[("focus", ACCENT), ("!focus", BORDER)],
+                  darkcolor=[("focus", ACCENT), ("!focus", BORDER)],
+                  arrowcolor=[("active", ACCENT)])
+        style.configure("Horizontal.TScale", background=CARD, troughcolor="#242429", borderwidth=0)
+        style.configure("Treeview", background=FIELD, fieldbackground=FIELD, foreground=TEXT,
+                        rowheight=28, borderwidth=0, font=FONT,
+                        bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
+        style.configure("Treeview.Heading", background="#191920", foreground=MUTED,
                         font=FONT_SMALL, relief="flat", borderwidth=0)
-        style.map("Treeview.Heading", background=[("active", "#F0F2F5")])
+        style.map("Treeview.Heading", background=[("active", "#202028")])
         style.map("Treeview", background=[("selected", ACCENT_SOFT)],
                   foreground=[("selected", TEXT)])
-        style.configure("Vertical.TScrollbar", background="#E7EAEF", troughcolor=CARD,
-                        bordercolor=CARD, arrowcolor=MUTED, width=10)
+        style.configure("Vertical.TScrollbar", gripcount=0, background="#2E2E36",
+                        troughcolor=CARD, bordercolor=CARD, lightcolor=CARD, darkcolor=CARD,
+                        arrowcolor=MUTED, arrowsize=12, borderwidth=0)
+        style.map("Vertical.TScrollbar",
+                  background=[("active", "#3A3A44"), ("pressed", "#3A3A44")],
+                  arrowcolor=[("active", ACCENT)])
 
     # ------------------------------------------------------------------ layout
     def _build(self) -> None:
@@ -280,7 +313,7 @@ class App(tk.Tk):
         tk.Label(titles, text="微信来消息 → 自定义提示音 + 语音播报", bg=CARD, fg=MUTED,
                  font=FONT_SMALL).pack(anchor="w")
 
-        self.status_label = tk.Label(header, text="● 启动中", bg=ACCENT_SOFT, fg=ACCENT_DARK,
+        self.status_label = tk.Label(header, text="● 启动中", bg=CARD_HOVER, fg=MUTED,
                                      font=FONT_SMALL, padx=12, pady=5)
         self.status_label.pack(side="right", padx=(0, 18))
         self.enabled_var = tk.BooleanVar(value=self.cfg.enabled)
@@ -304,7 +337,7 @@ class App(tk.Tk):
         body = tk.Frame(self, bg=BG)
         body.pack(side="top", fill="both", expand=True)
 
-        sidebar = tk.Frame(body, bg=CARD, width=196)
+        sidebar = tk.Frame(body, bg=BG, width=196)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         tk.Frame(body, bg=BORDER, width=1).pack(side="left", fill="y")
@@ -313,13 +346,13 @@ class App(tk.Tk):
         content.pack(side="left", fill="both", expand=True)
 
         self._nav: dict[str, dict] = {}
-        tk.Label(sidebar, text="设置", bg=CARD, fg=MUTED, font=FONT_SMALL,
+        tk.Label(sidebar, text="设置", bg=BG, fg=DIM, font=FONT_TINY,
                  anchor="w", padx=20, pady=10).pack(fill="x")
         for key, label in (("sound", "提示音"), ("voice", "语音播报"), ("filter", "提醒范围"),
                            ("hotkey", "快捷键"), ("recent", "最近消息")):
             self._nav_item(sidebar, key, label)
-        tk.Label(sidebar, text="数据来源：本地数据库\n（不需要微信窗口）", bg=CARD,
-                 fg="#A0A6AD", font=("Microsoft YaHei UI", 8), justify="left",
+        tk.Label(sidebar, text="数据来源：本地数据库\n（不需要微信窗口）", bg=BG,
+                 fg=DIM, font=FONT_TINY, justify="left",
                  anchor="w", padx=20).pack(side="bottom", fill="x", pady=12)
 
         self.pages: dict[str, tk.Frame] = {}
@@ -335,12 +368,12 @@ class App(tk.Tk):
         self._show_page("sound")
 
     def _nav_item(self, parent: tk.Frame, key: str, text: str) -> None:
-        row = tk.Frame(parent, bg=CARD, cursor="hand2")
+        row = tk.Frame(parent, bg=BG, cursor="hand2")
         row.pack(fill="x")
-        bar = tk.Frame(row, bg=CARD, width=3)
+        bar = tk.Frame(row, bg=BG, width=3)
         bar.pack(side="left", fill="y")
-        label = tk.Label(row, text=text, bg=CARD, fg=TEXT, font=FONT_NAV,
-                         anchor="w", padx=16, pady=10)
+        label = tk.Label(row, text=text, bg=BG, fg=MUTED, font=FONT_NAV,
+                         anchor="w", padx=16, pady=9)
         label.pack(side="left", fill="x", expand=True)
         for widget in (row, label):
             widget.bind("<Button-1>", lambda _e, k=key: self._show_page(k))
@@ -351,8 +384,8 @@ class App(tk.Tk):
     def _nav_paint(self, key: str, hover: bool = False) -> None:
         item = self._nav[key]
         active = key == self._page
-        bg = ACCENT_SOFT if active else ("#F6F7F9" if hover else CARD)
-        fg = ACCENT_DARK if active else TEXT
+        bg = ACCENT_SOFT if active else (CARD_HOVER if hover else BG)
+        fg = ACCENT if active else (TEXT if hover else MUTED)
         for widget in (item["row"], item["label"]):
             widget.configure(bg=bg)
         item["label"].configure(fg=fg)
@@ -370,13 +403,13 @@ class App(tk.Tk):
         shell = tk.Frame(parent, bg=CARD, highlightbackground=BORDER, highlightthickness=1)
         shell.pack(fill="x", pady=(0, 14))
         inner = tk.Frame(shell, bg=CARD)
-        inner.pack(fill="both", expand=True, padx=20, pady=16)
+        inner.pack(fill="both", expand=True, padx=22, pady=18)
         tk.Label(inner, text=title, bg=CARD, fg=TEXT, font=FONT_TITLE, anchor="w").pack(fill="x")
         if subtitle:
             tk.Label(inner, text=subtitle, bg=CARD, fg=MUTED, font=FONT_SMALL,
-                     anchor="w", justify="left").pack(fill="x", pady=(3, 12))
+                     anchor="w", justify="left").pack(fill="x", pady=(4, 14))
         else:
-            tk.Frame(inner, bg=CARD, height=10).pack(fill="x")
+            tk.Frame(inner, bg=CARD, height=12).pack(fill="x")
         return inner
 
     def _field_row(self, parent: tk.Frame, label: str, width: int = 14) -> tk.Frame:
@@ -389,7 +422,7 @@ class App(tk.Tk):
         return tk.Checkbutton(parent, text=text, variable=var, command=command,
                               bg=CARD, fg=TEXT, font=FONT, bd=0, highlightthickness=0,
                               activebackground=CARD, activeforeground=TEXT,
-                              selectcolor="white", anchor="w", cursor="hand2")
+                              selectcolor=FIELD, anchor="w", cursor="hand2")
 
     def _on_volume_change(self, value: float) -> None:
         self.vol_label.configure(text=f"{int(value * 100)}%")
@@ -431,7 +464,7 @@ class App(tk.Tk):
         self.sound_hint.pack(fill="x", pady=(8, 0))
         tk.Label(card, text="支持 wav / mp3 / wma；m4a、aac、flac、ogg 首次选择时自动转码。"
                             "加过的音频会一直保留在列表里。",
-                 bg=CARD, fg="#9AA1A9", font=FONT_SMALL, anchor="w", justify="left",
+                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w", justify="left",
                  wraplength=560).pack(fill="x", pady=(2, 0))
 
         tips = self._card(wrap, "它怎么读到消息的？",
@@ -439,7 +472,7 @@ class App(tk.Tk):
                           "取出主密钥，在内存中解密后直接读库——不截图、不用 OCR、不看界面。")
         tk.Label(tips, text="所以微信开不开窗口、最小化、关到托盘都无所谓；「谁发的」直接按发送者 "
                             "wxid 判断，你自己发的消息永远不会被念。全部在本机完成，不上传任何内容。",
-                 bg=CARD, fg="#9AA1A9", font=FONT_SMALL, anchor="w", justify="left",
+                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w", justify="left",
                  wraplength=560).pack(fill="x")
 
         self._refresh_sound_list()
@@ -457,7 +490,7 @@ class App(tk.Tk):
         self.tpl_var.trace_add("write", self._mark_dirty)
         ttk.Entry(trow, textvariable=self.tpl_var, width=44).pack(side="left")
         tk.Label(card, text="可用占位符：{sender} 发送者　{chat} 会话名　{content} 内容",
-                 bg=CARD, fg="#9AA1A9", font=FONT_SMALL, anchor="w").pack(fill="x")
+                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w").pack(fill="x")
 
         vrow = self._field_row(card, "发音人")
         self._voice_opts = tts_engine.voice_options()
@@ -497,7 +530,7 @@ class App(tk.Tk):
         btns2 = tk.Frame(card, bg=CARD)
         btns2.pack(fill="x", pady=(10, 0))
         ttk.Button(btns2, text="停止播报", command=self._stop_speech).pack(side="left")
-        tk.Label(btns2, text="快捷键也能随时打断", bg=CARD, fg="#9AA1A9",
+        tk.Label(btns2, text="快捷键也能随时打断", bg=CARD, fg=MUTED,
                  font=FONT_SMALL).pack(side="left", padx=10)
 
     def _build_filter_page(self, page: tk.Frame) -> None:
@@ -521,7 +554,7 @@ class App(tk.Tk):
         self.rules_tree.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
         self.rules_tree.pack(side="left", fill="both", expand=True)
-        self.rules_tree.tag_configure("off", foreground="#A6ACB5")
+        self.rules_tree.tag_configure("off", foreground=DIM)
         self.rules_tree.bind("<Button-1>", self._on_rule_click)
         self._refresh_rules_tree()
 
@@ -534,7 +567,7 @@ class App(tk.Tk):
                    command=lambda: self._set_all_rules(True)).pack(side="left", padx=(8, 0))
         ttk.Button(tools, text="全关", width=6,
                    command=lambda: self._set_all_rules(False)).pack(side="left", padx=(8, 0))
-        tk.Label(tools, text="支持 emoji 名字，改动自动保存", bg=CARD, fg="#9AA1A9",
+        tk.Label(tools, text="支持 emoji 名字，改动自动保存", bg=CARD, fg=MUTED,
                  font=FONT_SMALL).pack(side="left", padx=10)
 
         opts = tk.Frame(card, bg=CARD)
@@ -546,7 +579,7 @@ class App(tk.Tk):
         self.auto_restore_var = tk.BooleanVar(value=False)
         self.stealth_var = tk.BooleanVar(value=False)
         tk.Label(opts, text="数据库版与窗口无关：微信开着就行，最小化 / 关到托盘 / 不开窗口都能读。",
-                 bg=CARD, fg="#9AA1A9", font=FONT_SMALL, anchor="w").pack(anchor="w", pady=(6, 0))
+                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w").pack(anchor="w", pady=(6, 0))
 
     def _on_stealth_toggle(self) -> None:
         self._mark_dirty()
@@ -583,7 +616,7 @@ class App(tk.Tk):
 
         tk.Label(card, text="写法示例：ctrl+alt+q、ctrl+shift+F9、alt+space。"
                             "组合键被别的程序占用时会提示，换一个即可。",
-                 bg=CARD, fg="#9AA1A9", font=FONT_SMALL, anchor="w",
+                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w",
                  wraplength=560, justify="left").pack(fill="x", pady=(12, 0))
 
     def _build_recent_page(self, page: tk.Frame) -> None:
@@ -593,24 +626,24 @@ class App(tk.Tk):
 
         box = tk.Frame(card, bg=CARD)
         box.pack(fill="both", expand=True)
-        self.log_box = tk.Listbox(box, height=12, font=FONT_SMALL, relief="flat", bg="white",
+        self.log_box = tk.Listbox(box, height=12, font=FONT_SMALL, relief="flat", bg=FIELD,
                                   fg=TEXT, highlightthickness=1, highlightbackground=BORDER,
-                                  activestyle="none", selectbackground=ACCENT_SOFT,
-                                  selectforeground=TEXT)
+                                  highlightcolor=BORDER, activestyle="none",
+                                  selectbackground=ACCENT_SOFT, selectforeground=TEXT)
         scroll = ttk.Scrollbar(box, orient="vertical", command=self.log_box.yview)
         self.log_box.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
         self.log_box.pack(side="left", fill="both", expand=True)
         self.log_box.insert("end", "还没有记录 —— 来一条微信消息，或点下面的「模拟一条消息」")
-        self.log_box.itemconfig(0, foreground="#A6ACB5")
+        self.log_box.itemconfig(0, foreground=DIM)
 
         btns = tk.Frame(card, bg=CARD)
         btns.pack(fill="x", pady=(12, 0))
         ttk.Button(btns, text="模拟一条消息", command=self._simulate).pack(side="left")
         ttk.Button(btns, text="打开 Windows 通知设置",
                    command=lambda: os.startfile("ms-settings:notifications")).pack(side="left", padx=8)
-        tk.Label(card, text="每次播报也会追加写入 last_messages.log（在 %APPDATA%\\WeChatVoiceAlert 下）",
-                 bg=CARD, fg="#9AA1A9", font=FONT_SMALL, anchor="w").pack(fill="x", pady=(8, 0))
+        tk.Label(card, text="每次播报也会追加写入 last_messages.log（在 %APPDATA%\\WeChatDBAlert 下）",
+                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w").pack(fill="x", pady=(8, 0))
 
     # ------------------------------------------------------------- helpers
     def _refresh_sound_list(self) -> None:
@@ -748,8 +781,8 @@ class App(tk.Tk):
     def _set_status(self, text: str, color: str = ACCENT_DARK, ok: bool = True) -> None:
         if color == DANGER or color.startswith("#c0"):
             ok = False
-        self.status_label.configure(text=f"● {text}", bg=ACCENT_SOFT if ok else DANGER_SOFT,
-                                    fg=ACCENT_DARK if ok else DANGER)
+        self.status_label.configure(text=f"● {text}", bg=GREEN_SOFT if ok else DANGER_SOFT,
+                                    fg=GREEN if ok else DANGER)
 
     # --------------------------------------------------------------- filter
     def _match_rule(self, chat: str, sender: str):
@@ -876,7 +909,7 @@ class App(tk.Tk):
         self.after(120, self._pump)
 
     def _flash_hotkey(self) -> None:
-        self.hotkey_status.configure(text="已打断播报", foreground="#1C7ED6")
+        self.hotkey_status.configure(text="已打断播报", foreground=ACCENT)
         self.after(1500, lambda: self.hotkey_status.configure(text="已生效", foreground=ACCENT_DARK))
 
     def _on_message(self, msg: dict) -> None:
