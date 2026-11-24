@@ -17,6 +17,9 @@ import threading
 import time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import font as tkfont
+
+from PIL import Image, ImageDraw, ImageTk
 
 import hotkey as hotkey_mod
 import sound_player
@@ -30,7 +33,36 @@ HERE = os.path.dirname(sys.executable) if FROZEN else os.path.dirname(os.path.ab
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "WeChatDBAlert"
 
-# 深色配色（参考「岛仔」的暗色系：近黑底、低饱和描边、蓝色主色、绿=在线/红=警告）
+# ---------------------------------------------------------------- 主题
+THEMES = {
+    "midnight": {
+        "name": "深空黑", "desc": "近黑底 · 蓝色主色", "dark": True,
+        "bg": "#0D0D10", "card": "#151518", "card_hover": "#1C1C21", "field": "#101013",
+        "border": "#26262C", "text": "#F2F3F5", "muted": "#9C9EA8", "dim": "#6E7079",
+        "accent": "#3EACF8", "accent_dark": "#2F8FD4", "accent_soft": "#10293B",
+        "danger": "#F23046", "danger_soft": "#3A1116",
+        "green": "#30D158", "green_soft": "#0F2A1B", "on_accent": "#04121C",
+    },
+    "cream": {
+        "name": "奶油", "desc": "暖白底 · 砖红主色", "dark": False,
+        "bg": "#F3ECE0", "card": "#FFFCF6", "card_hover": "#F8F1E5", "field": "#FBF5EA",
+        "border": "#E5DACA", "text": "#2B2620", "muted": "#7F7466", "dim": "#AA9E8D",
+        "accent": "#D2603F", "accent_dark": "#B44E31", "accent_soft": "#F7E3D9",
+        "danger": "#C0392B", "danger_soft": "#FAE3DE",
+        "green": "#2F9E63", "green_soft": "#E2F3E8", "on_accent": "#FFFFFF",
+    },
+    "mist": {
+        "name": "雾蓝", "desc": "海军蓝底 · 冰蓝主色", "dark": True,
+        "bg": "#0A111D", "card": "#111A2A", "card_hover": "#18243A", "field": "#0D1625",
+        "border": "#22304A", "text": "#E9EFF9", "muted": "#95A6C2", "dim": "#62748F",
+        "accent": "#6EA8FE", "accent_dark": "#4C8BE8", "accent_soft": "#172B49",
+        "danger": "#F25C54", "danger_soft": "#3A1518",
+        "green": "#4ED08A", "green_soft": "#0F2A1E", "on_accent": "#06101F",
+    },
+}
+THEME_ORDER = ["midnight", "cream", "mist"]
+
+# 运行期颜色（apply_theme 填充；换主题时整窗重建）
 BG = "#0D0D10"
 CARD = "#151518"
 CARD_HOVER = "#1C1C21"
@@ -47,6 +79,26 @@ DANGER_SOFT = "#3A1116"
 GREEN = "#30D158"
 GREEN_SOFT = "#0F2A1B"
 ON_ACCENT = "#04121C"
+IS_DARK = True
+
+
+def apply_theme(key: str) -> str:
+    global BG, CARD, CARD_HOVER, FIELD, BORDER, TEXT, MUTED, DIM
+    global ACCENT, ACCENT_DARK, ACCENT_SOFT, DANGER, DANGER_SOFT, GREEN, GREEN_SOFT
+    global ON_ACCENT, IS_DARK
+    key = key if key in THEMES else "midnight"
+    t = THEMES[key]
+    BG, CARD, CARD_HOVER = t["bg"], t["card"], t["card_hover"]
+    FIELD, BORDER, TEXT = t["field"], t["border"], t["text"]
+    MUTED, DIM = t["muted"], t["dim"]
+    ACCENT, ACCENT_DARK, ACCENT_SOFT = t["accent"], t["accent_dark"], t["accent_soft"]
+    DANGER, DANGER_SOFT = t["danger"], t["danger_soft"]
+    GREEN, GREEN_SOFT = t["green"], t["green_soft"]
+    ON_ACCENT, IS_DARK = t["on_accent"], t["dark"]
+    return key
+
+
+apply_theme("midnight")
 
 FONT = ("Microsoft YaHei UI", 10)
 FONT_SMALL = ("Microsoft YaHei UI", 9)
@@ -54,6 +106,253 @@ FONT_TINY = ("Microsoft YaHei UI", 8)
 FONT_TITLE = ("Microsoft YaHei UI", 12, "bold")
 FONT_H1 = ("Microsoft YaHei UI", 15, "bold")
 FONT_NAV = ("Microsoft YaHei UI", 10)
+
+
+# ------------------------------------------------------------ 圆角与图标
+def _hex_rgb(color: str) -> tuple:
+    return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+
+
+def mix(c1: str, c2: str, t: float) -> str:
+    r1, g1, b1 = _hex_rgb(c1)
+    r2, g2, b2 = _hex_rgb(c2)
+    return "#%02X%02X%02X" % (round(r1 + (r2 - r1) * t), round(g1 + (g2 - g1) * t),
+                              round(b1 + (b2 - b1) * t))
+
+
+_RESAMPLE = getattr(Image, "Resampling", Image).LANCZOS
+
+
+def rounded_image(w: int, h: int, radius: int, fill: str, border: str,
+                  border_w: int = 1, ss: int = 3) -> Image.Image:
+    """抗锯齿圆角矩形：3 倍超采样后缩回。"""
+    w, h = max(2, int(w)), max(2, int(h))
+    big = (w * ss, h * ss)
+    img = Image.new("RGBA", big, (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, big[0] - 1, big[1] - 1), radius=radius * ss,
+                        fill=fill, outline=border, width=max(1, border_w * ss))
+    return img.resize((w, h), _RESAMPLE)
+
+
+_ICON_CACHE: dict = {}
+
+
+def icon_image(name: str, color: str, size: int = 16) -> ImageTk.PhotoImage:
+    """在 16×16 网格上画的小图标，4 倍超采样，返回 Tk 图片。"""
+    key = (name, color, size)
+    if key in _ICON_CACHE:
+        return _ICON_CACHE[key]
+    S = size * 4
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    u = S / 16.0
+    lw = max(2, int(1.7 * u))
+
+    def line(x1, y1, x2, y2, w=lw):
+        d.line([x1 * u, y1 * u, x2 * u, y2 * u], fill=color, width=w)
+
+    if name == "speaker":
+        d.polygon([(2 * u, 6 * u), (5 * u, 6 * u), (9 * u, 2.5 * u),
+                   (9 * u, 13.5 * u), (5 * u, 10 * u), (2 * u, 10 * u)], fill=color)
+        d.arc([8 * u, 4 * u, 14 * u, 12 * u], start=-55, end=55, fill=color, width=lw)
+        d.arc([6.5 * u, 2 * u, 15 * u, 14 * u], start=-50, end=50, fill=color, width=lw)
+    elif name == "wave":
+        for x, hh in ((3, 4), (6.6, 8), (10.3, 11), (14, 6)):
+            line(x, 8 - hh / 2, x, 8 + hh / 2, max(2, int(1.8 * u)))
+    elif name == "filter":
+        for y, kx in ((4, 10), (8, 5.5), (12, 11.5)):
+            line(2, y, 14, y, max(2, int(1.4 * u)))
+            d.ellipse([(kx - 1.6) * u, (y - 1.6) * u, (kx + 1.6) * u, (y + 1.6) * u],
+                      fill=color)
+    elif name == "key":
+        d.rounded_rectangle([1.5 * u, 5 * u, 14.5 * u, 12 * u], radius=2 * u,
+                            outline=color, width=lw)
+        for i in range(3):
+            d.ellipse([(4 + i * 3.4) * u - 0.7 * u, 8.5 * u - 0.7 * u,
+                       (4 + i * 3.4) * u + 0.7 * u, 8.5 * u + 0.7 * u], fill=color)
+    elif name == "clock":
+        d.ellipse([1.5 * u, 1.5 * u, 14.5 * u, 14.5 * u], outline=color, width=lw)
+        line(8, 8, 8, 4.2)
+        line(8, 8, 11, 9.6)
+    elif name == "palette":
+        d.ellipse([1.5 * u, 1.5 * u, 14.5 * u, 14.5 * u], outline=color, width=lw)
+        for cx, cy in ((6, 6.4), (10.4, 6), (11, 10.2), (5.6, 10.8)):
+            d.ellipse([(cx - 1.1) * u, (cy - 1.1) * u, (cx + 1.1) * u, (cy + 1.1) * u],
+                      fill=color)
+    elif name == "check":
+        d.line([(3 * u, 8.5 * u), (6.6 * u, 12 * u), (13 * u, 4.5 * u)],
+               fill=color, width=max(2, int(2.0 * u)))
+    elif name == "close":
+        line(4, 4, 12, 12, max(2, int(1.8 * u)))
+        line(12, 4, 4, 12, max(2, int(1.8 * u)))
+    photo = ImageTk.PhotoImage(img.resize((size, size), _RESAMPLE))
+    _ICON_CACHE[key] = photo
+    return photo
+
+
+def _bg_of(widget) -> str:
+    try:
+        return widget.cget("bg")
+    except Exception:
+        return BG
+
+
+class RoundedPanel(tk.Frame):
+    """卡片：底部是 PIL 画的圆角矩形，内容正常 pack 在上面。"""
+
+    def __init__(self, parent, radius: int = 16, pad: int = 20,
+                 fill: str | None = None, border: str | None = None, bg: str | None = None):
+        bg = bg or _bg_of(parent)
+        super().__init__(parent, bg=bg)
+        self._fill, self._border, self._radius = fill or CARD, border or BORDER, radius
+        self._canvas = tk.Canvas(self, bg=bg, highlightthickness=0, bd=0)
+        self._canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        self.inner = tk.Frame(self, bg=self._fill)
+        self.inner.pack(fill="both", expand=True, padx=pad, pady=pad)
+        self._photo = None
+        self._job = None
+        self._last = (0, 0)
+        self.bind("<Configure>", self._on_configure)
+
+    def _on_configure(self, event) -> None:
+        if (event.width, event.height) == self._last:
+            return
+        self._last = (event.width, event.height)
+        if self._job:
+            self.after_cancel(self._job)
+        self._job = self.after(16, self._render)
+
+    def _render(self) -> None:
+        w, h = self._last
+        if w < 8 or h < 8:
+            return
+        self._photo = ImageTk.PhotoImage(
+            rounded_image(w, h, self._radius, self._fill, self._border))
+        self._canvas.delete("all")
+        self._canvas.create_image(0, 0, anchor="nw", image=self._photo)
+
+
+class RoundButton(tk.Canvas):
+    """圆角按钮：PIL 画底，Tk 画字，带 hover / pressed 状态。"""
+
+    def __init__(self, parent, text: str, command=None, kind: str = "secondary",
+                 icon: str | None = None, height: int = 34, pad_x: int = 16,
+                 radius: int = 10, width: int | None = None, font=None):
+        bg = _bg_of(parent)
+        self._kind = kind
+        self._text = text
+        self._command = command
+        self._icon_name = icon
+        self._font = font or FONT
+        self._pad_x = pad_x
+        self._radius = radius
+        self._enabled = True
+        self._hover = False
+        self._pressed = False
+        tw = tkfont.Font(font=self._font).measure(text)
+        self._iw = 18 if icon else 0
+        w = width or (tw + self._pad_x * 2 + (self._iw + 6 if icon else 0))
+        super().__init__(parent, width=w, height=height, bg=bg,
+                         highlightthickness=0, bd=0, cursor="hand2")
+        self._photo = None
+        self._draw()
+        self.bind("<Enter>", lambda _e: self._set_hover(True))
+        self.bind("<Leave>", lambda _e: self._set_hover(False))
+        self.bind("<Button-1>", lambda _e: self._set_pressed(True))
+        self.bind("<ButtonRelease-1>", self._on_release)
+
+    # -- colors -------------------------------------------------------
+    def _palette(self):
+        if not self._enabled:
+            return CARD, BORDER, DIM
+        if self._kind == "primary":
+            base = ACCENT_DARK if (self._hover or self._pressed) else ACCENT
+            return base, base, ON_ACCENT
+        if self._kind == "danger":
+            return mix(CARD, DANGER, 0.10), mix(CARD, DANGER, 0.35), DANGER
+        if self._kind == "ghost":
+            base = CARD_HOVER if self._hover else _bg_of(self.master)
+            return base, base, MUTED if not self._hover else TEXT
+        base = mix(CARD, TEXT, 0.10 if self._hover else 0.05)
+        if self._pressed:
+            base = mix(CARD, TEXT, 0.14)
+        return base, BORDER, TEXT
+
+    def _draw(self) -> None:
+        w, h = int(self["width"]), int(self["height"])
+        fill, border, fg = self._palette()
+        self._photo = ImageTk.PhotoImage(rounded_image(w, h, self._radius, fill, border))
+        self.delete("all")
+        self.create_image(0, 0, anchor="nw", image=self._photo)
+        x = self._pad_x
+        if self._icon_name:
+            self.create_image(x, h // 2, anchor="w", image=icon_image(self._icon_name, fg))
+            x += self._iw + 6
+        self.create_text(x, h // 2, anchor="w", text=self._text, fill=fg, font=self._font)
+
+    def _set_hover(self, on: bool) -> None:
+        if on != self._hover:
+            self._hover = on
+            self._draw()
+
+    def _set_pressed(self, on: bool) -> None:
+        self._pressed = on
+        if on:
+            self._draw()
+
+    def _on_release(self, event) -> None:
+        was = self._pressed
+        self._pressed = False
+        self._draw()
+        if was and self._enabled and 0 <= event.x <= int(self["width"]) \
+                and 0 <= event.y <= int(self["height"]) and self._command:
+            self._command()
+
+    def set_enabled(self, on: bool) -> None:
+        self._enabled = bool(on)
+        self.configure(cursor="hand2" if on else "arrow")
+        self._draw()
+
+
+class NavItem(tk.Canvas):
+    """侧栏条目：圆角选中块 + 图标 + 文字。"""
+
+    def __init__(self, parent, key: str, text: str, icon: str, on_click):
+        super().__init__(parent, width=180, height=38, bg=_bg_of(parent),
+                         highlightthickness=0, bd=0, cursor="hand2")
+        self.key, self.text, self.icon_name, self.on_click = key, text, icon, on_click
+        self._active = False
+        self._hover = False
+        self._photo = None
+        self._draw()
+        self.bind("<Button-1>", lambda _e: self.on_click(self.key))
+        self.bind("<Enter>", lambda _e: self._set_hover(True))
+        self.bind("<Leave>", lambda _e: self._set_hover(False))
+
+    def _set_hover(self, on: bool) -> None:
+        if on != self._hover:
+            self._hover = on
+            self._draw()
+
+    def set_active(self, on: bool) -> None:
+        if on != self._active:
+            self._active = on
+            self._draw()
+
+    def _draw(self) -> None:
+        w, h = int(self["width"]), int(self["height"])
+        if self._active:
+            fill, fg = ACCENT_SOFT, ACCENT
+        elif self._hover:
+            fill, fg = CARD_HOVER, TEXT
+        else:
+            fill, fg = _bg_of(self.master), MUTED
+        self._photo = ImageTk.PhotoImage(rounded_image(w, h, 10, fill, fill))
+        self.delete("all")
+        self.create_image(0, 0, anchor="nw", image=self._photo)
+        self.create_image(14, h // 2, anchor="w", image=icon_image(self.icon_name, fg))
+        self.create_text(38, h // 2, anchor="w", text=self.text, fill=fg, font=FONT_NAV)
 
 # emoji / pictographs / dingbats: OCR never returns these, so they must not count
 _EMOJI_RE = re.compile(
@@ -170,7 +469,7 @@ class Slider(tk.Canvas):
     def _draw(self) -> None:
         self.delete("all")
         y = self._ch - 9
-        round_rect(self, 0, y - 3, self._cw, y + 3, 3, fill="#242429", outline="")
+        round_rect(self, 0, y - 3, self._cw, y + 3, 3, fill=mix(CARD, TEXT, 0.14), outline="")
         x = self._x_of(self._value)
         if x > 2:
             round_rect(self, 0, y - 3, x, y + 3, 3, fill=ACCENT, outline="")
@@ -181,6 +480,15 @@ class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.cfg = Config.load()
+        apply_theme(self.cfg.theme)
+        if "--theme" in sys.argv:            # 截图/调试用：--theme cream
+            try:
+                key = sys.argv[sys.argv.index("--theme") + 1]
+                if key in THEMES:
+                    self.cfg.theme = apply_theme(key)
+                    self.cfg.save()
+            except (IndexError, OSError):
+                pass
         self.queue: "queue.Queue[tuple]" = queue.Queue()
         self.player = sound_player.SoundPlayer()
         self.tts = tts_engine.TTSEngine(self.cfg.tts_voice, self.cfg.tts_rate, self.cfg.tts_volume)
@@ -247,8 +555,10 @@ class App(tk.Tk):
                 r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
                 return r | (g << 8) | (b << 16)
 
-            on = ctypes.c_int(1)
+            on = ctypes.c_int(1 if IS_DARK else 0)
             dwm = ctypes.windll.dwmapi
+            round_pref = ctypes.c_int(2)                               # DWMWCP_ROUND
+            dwm.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(round_pref), 4)
             dwm.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(on), 4)   # 深色标题栏
             dwm.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(on), 4)   # 旧版本编号
             cap, txt = ctypes.c_int(ref(CARD)), ctypes.c_int(ref(TEXT))
@@ -273,14 +583,15 @@ class App(tk.Tk):
         style.configure("CardTitle.TLabel", background=CARD, foreground=TEXT, font=FONT_TITLE)
         style.configure("TCheckbutton", background=CARD, foreground=TEXT, font=FONT)
         style.map("TCheckbutton", background=[("active", CARD)],
-                  indicatorcolor=[("selected", ACCENT), ("!selected", "#2A2A31")],
+                  indicatorcolor=[("selected", ACCENT), ("!selected", mix(CARD, TEXT, 0.12))],
                   foreground=[("disabled", DIM)])
         style.configure("TRadiobutton", background=CARD, foreground=TEXT, font=FONT)
         style.map("TRadiobutton", background=[("active", CARD)],
-                  indicatorcolor=[("selected", ACCENT), ("!selected", "#2A2A31")])
+                  indicatorcolor=[("selected", ACCENT), ("!selected", mix(CARD, TEXT, 0.12))])
         style.configure("TButton", font=FONT, padding=(12, 5), relief="flat",
-                        background="#1E1E24", foreground=TEXT, borderwidth=0)
-        style.map("TButton", background=[("active", "#26262E"), ("pressed", "#2E2E37")])
+                        background=mix(CARD, TEXT, 0.08), foreground=TEXT, borderwidth=0)
+        style.map("TButton", background=[("active", mix(CARD, TEXT, 0.14)),
+                                          ("pressed", mix(CARD, TEXT, 0.18))])
         style.configure("Accent.TButton", background=ACCENT, foreground=ON_ACCENT, padding=(16, 6))
         style.map("Accent.TButton", background=[("active", ACCENT_DARK), ("pressed", ACCENT_DARK)])
         style.configure("Ghost.TButton", background=CARD, foreground=MUTED, padding=(8, 4))
@@ -291,12 +602,12 @@ class App(tk.Tk):
                   bordercolor=[("focus", ACCENT), ("!focus", BORDER)],
                   lightcolor=[("focus", ACCENT), ("!focus", BORDER)],
                   darkcolor=[("focus", ACCENT), ("!focus", BORDER)])
-        style.configure("TCombobox", fieldbackground=FIELD, background="#1E1E24", foreground=TEXT,
+        style.configure("TCombobox", fieldbackground=FIELD, background=mix(FIELD, TEXT, 0.07), foreground=TEXT,
                         bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER,
                         arrowcolor=MUTED, padding=5, relief="flat")
         style.map("TCombobox",
                   fieldbackground=[("readonly", FIELD), ("focus", FIELD)],
-                  background=[("active", "#26262E"), ("readonly", "#1E1E24")],
+                  background=[("active", mix(FIELD, TEXT, 0.14)), ("readonly", mix(FIELD, TEXT, 0.07))],
                   foreground=[("readonly", TEXT)],
                   selectbackground=[("readonly", FIELD)],
                   selectforeground=[("readonly", TEXT)],
@@ -308,33 +619,35 @@ class App(tk.Tk):
         style.configure("Treeview", background=FIELD, fieldbackground=FIELD, foreground=TEXT,
                         rowheight=28, borderwidth=0, font=FONT,
                         bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
-        style.configure("Treeview.Heading", background="#191920", foreground=MUTED,
+        style.configure("Treeview.Heading", background=mix(CARD, TEXT, 0.03), foreground=MUTED,
                         font=FONT_SMALL, relief="flat", borderwidth=0)
-        style.map("Treeview.Heading", background=[("active", "#202028")])
+        style.map("Treeview.Heading", background=[("active", mix(CARD, TEXT, 0.07))])
         style.map("Treeview", background=[("selected", ACCENT_SOFT)],
                   foreground=[("selected", TEXT)])
-        style.configure("Vertical.TScrollbar", gripcount=0, background="#2E2E36",
+        style.configure("Vertical.TScrollbar", gripcount=0, background=mix(CARD, TEXT, 0.12),
                         troughcolor=CARD, bordercolor=CARD, lightcolor=CARD, darkcolor=CARD,
                         arrowcolor=MUTED, arrowsize=12, borderwidth=0)
         style.map("Vertical.TScrollbar",
-                  background=[("active", "#3A3A44"), ("pressed", "#3A3A44")],
+                  background=[("active", mix(CARD, TEXT, 0.2)), ("pressed", mix(CARD, TEXT, 0.2))],
                   arrowcolor=[("active", ACCENT)])
 
     # ------------------------------------------------------------------ layout
     def _build(self) -> None:
-        header = tk.Frame(self, bg=CARD, height=62)
+        self.configure(bg=BG)
+        header = tk.Frame(self, bg=CARD, height=72)
         header.pack(side="top", fill="x")
         header.pack_propagate(False)
         tk.Frame(header, bg=BORDER, height=1).pack(side="bottom", fill="x")
 
         logo = tk.Canvas(header, width=34, height=34, bg=CARD, highlightthickness=0)
-        logo.pack(side="left", padx=(18, 10), pady=14)
-        round_rect(logo, 1, 1, 33, 33, 10, fill=ACCENT, outline="")
+        logo.pack(side="left", padx=(18, 10), pady=19)
+        logo.create_image(0, 0, anchor="nw",
+                          image=ImageTk.PhotoImage(rounded_image(34, 34, 10, ACCENT, ACCENT)))
         logo.create_oval(9, 8, 25, 21, fill="white", outline="")
         logo.create_polygon([12, 19, 12, 26, 19, 20], fill="white", outline="")
 
         titles = tk.Frame(header, bg=CARD)
-        titles.pack(side="left", pady=10)
+        titles.pack(side="left", pady=(12, 10))
         tk.Label(titles, text=APP_TITLE, bg=CARD, fg=TEXT, font=FONT_H1).pack(anchor="w")
         tk.Label(titles, text="微信来消息 → 自定义提示音 + 语音播报", bg=CARD, fg=MUTED,
                  font=FONT_SMALL).pack(anchor="w")
@@ -345,7 +658,7 @@ class App(tk.Tk):
         self.enabled_var = tk.BooleanVar(value=self.cfg.enabled)
         self._check(header, "启用提醒", self.enabled_var, self._on_toggle).pack(side="right", padx=14)
 
-        footer = tk.Frame(self, bg=CARD, height=56)
+        footer = tk.Frame(self, bg=CARD, height=58)
         footer.pack(side="bottom", fill="x")
         footer.pack_propagate(False)
         tk.Frame(self, bg=BORDER, height=1).pack(side="bottom", fill="x")
@@ -357,8 +670,8 @@ class App(tk.Tk):
         self.dead_hint.pack(side="left", padx=6)
         self.save_hint = tk.Label(footer, text="", bg=CARD, fg=MUTED, font=FONT_SMALL)
         self.save_hint.pack(side="left", padx=6)
-        ttk.Button(footer, text="保存并应用", style="Accent.TButton",
-                   command=lambda: self._save()).pack(side="right", padx=18, pady=10)
+        RoundButton(footer, "保存并应用", lambda: self._save(), kind="primary",
+                    icon="check", height=36).pack(side="right", padx=18, pady=11)
 
         body = tk.Frame(self, bg=BG)
         body.pack(side="top", fill="both", expand=True)
@@ -371,18 +684,24 @@ class App(tk.Tk):
         content = tk.Frame(body, bg=BG)
         content.pack(side="left", fill="both", expand=True)
 
-        self._nav: dict[str, dict] = {}
+        self._nav: dict[str, NavItem] = {}
         tk.Label(sidebar, text="设置", bg=BG, fg=DIM, font=FONT_TINY,
-                 anchor="w", padx=20, pady=10).pack(fill="x")
-        for key, label in (("sound", "提示音"), ("voice", "语音播报"), ("filter", "提醒范围"),
-                           ("hotkey", "快捷键"), ("recent", "最近消息")):
-            self._nav_item(sidebar, key, label)
+                 anchor="w", padx=20, pady=6).pack(fill="x", pady=(12, 2))
+        for key, label, icon in (("sound", "提示音", "speaker"),
+                                 ("voice", "语音播报", "wave"),
+                                 ("filter", "提醒范围", "filter"),
+                                 ("hotkey", "快捷键", "key"),
+                                 ("recent", "最近消息", "clock"),
+                                 ("theme", "外观", "palette")):
+            item = NavItem(sidebar, key, label, icon, self._show_page)
+            item.pack(padx=8, pady=1, anchor="w")
+            self._nav[key] = item
         tk.Label(sidebar, text="数据来源：本地数据库\n（不需要微信窗口）", bg=BG,
                  fg=DIM, font=FONT_TINY, justify="left",
                  anchor="w", padx=20).pack(side="bottom", fill="x", pady=12)
 
         self.pages: dict[str, tk.Frame] = {}
-        for key in ("sound", "voice", "filter", "hotkey", "recent"):
+        for key in ("sound", "voice", "filter", "hotkey", "recent", "theme"):
             page = tk.Frame(content, bg=BG)
             self.pages[key] = page
 
@@ -391,45 +710,21 @@ class App(tk.Tk):
         self._build_filter_page(self.pages["filter"])
         self._build_hotkey_page(self.pages["hotkey"])
         self._build_recent_page(self.pages["recent"])
+        self._build_theme_page(self.pages["theme"])
         self._show_page("sound")
-
-    def _nav_item(self, parent: tk.Frame, key: str, text: str) -> None:
-        row = tk.Frame(parent, bg=BG, cursor="hand2")
-        row.pack(fill="x")
-        bar = tk.Frame(row, bg=BG, width=3)
-        bar.pack(side="left", fill="y")
-        label = tk.Label(row, text=text, bg=BG, fg=MUTED, font=FONT_NAV,
-                         anchor="w", padx=16, pady=9)
-        label.pack(side="left", fill="x", expand=True)
-        for widget in (row, label):
-            widget.bind("<Button-1>", lambda _e, k=key: self._show_page(k))
-            widget.bind("<Enter>", lambda _e, r=row, k=key: self._nav_paint(k, hover=True))
-            widget.bind("<Leave>", lambda _e, r=row, k=key: self._nav_paint(k, hover=False))
-        self._nav[key] = {"row": row, "bar": bar, "label": label}
-
-    def _nav_paint(self, key: str, hover: bool = False) -> None:
-        item = self._nav[key]
-        active = key == self._page
-        bg = ACCENT_SOFT if active else (CARD_HOVER if hover else BG)
-        fg = ACCENT if active else (TEXT if hover else MUTED)
-        for widget in (item["row"], item["label"]):
-            widget.configure(bg=bg)
-        item["label"].configure(fg=fg)
-        item["bar"].configure(bg=ACCENT if active else bg)
 
     def _show_page(self, key: str) -> None:
         self._page = key
         for name, page in self.pages.items():
             page.pack_forget()
         self.pages[key].pack(fill="both", expand=True)
-        for name in self._nav:
-            self._nav_paint(name)
+        for name, item in self._nav.items():
+            item.set_active(name == key)
 
     def _card(self, parent: tk.Frame, title: str, subtitle: str = "") -> tk.Frame:
-        shell = tk.Frame(parent, bg=CARD, highlightbackground=BORDER, highlightthickness=1)
-        shell.pack(fill="x", pady=(0, 14))
-        inner = tk.Frame(shell, bg=CARD)
-        inner.pack(fill="both", expand=True, padx=22, pady=18)
+        panel = RoundedPanel(parent, radius=16, pad=22)
+        panel.pack(fill="x", pady=(0, 14))
+        inner = panel.inner
         tk.Label(inner, text=title, bg=CARD, fg=TEXT, font=FONT_TITLE, anchor="w").pack(fill="x")
         if subtitle:
             tk.Label(inner, text=subtitle, bg=CARD, fg=MUTED, font=FONT_SMALL,
@@ -474,8 +769,8 @@ class App(tk.Tk):
         self.sound_box = ttk.Combobox(row, textvariable=self.sound_var, state="readonly", width=30)
         self.sound_box.pack(side="left")
         self.sound_box.bind("<<ComboboxSelected>>", lambda _e: self._on_sound_pick())
-        ttk.Button(row, text="试听", command=self._preview_sound).pack(side="left", padx=8)
-        ttk.Button(row, text="删除", width=6, command=self._remove_sound).pack(side="left")
+        RoundButton(row, "试听", self._preview_sound, icon="speaker").pack(side="left", padx=8)
+        RoundButton(row, "删除", self._remove_sound, kind="ghost").pack(side="left")
 
         vrow = self._field_row(card, "提示音音量")
         self.vol_slider = Slider(vrow, 0.05, 1.0, self.cfg.sound_volume, self._on_volume_change)
@@ -528,7 +823,7 @@ class App(tk.Tk):
         self.voice_var.trace_add("write", self._mark_dirty)
         ttk.Combobox(vrow, textvariable=self.voice_var, values=labels,
                      state="readonly", width=32).pack(side="left")
-        ttk.Button(vrow, text="试听", command=self._preview_tts).pack(side="left", padx=8)
+        RoundButton(vrow, "试听", self._preview_tts).pack(side="left", padx=8)
 
         rrow = self._field_row(card, "语速")
         self.rate_slider = Slider(rrow, -6, 6, self.cfg.tts_rate, self._on_rate_change,
@@ -555,7 +850,7 @@ class App(tk.Tk):
                     self.full_read_var, self._mark_dirty).pack(anchor="w")
         btns2 = tk.Frame(card, bg=CARD)
         btns2.pack(fill="x", pady=(10, 0))
-        ttk.Button(btns2, text="停止播报", command=self._stop_speech).pack(side="left")
+        RoundButton(btns2, "停止播报", self._stop_speech).pack(side="left")
         tk.Label(btns2, text="快捷键也能随时打断", bg=CARD, fg=MUTED,
                  font=FONT_SMALL).pack(side="left", padx=10)
 
@@ -586,13 +881,10 @@ class App(tk.Tk):
 
         tools = tk.Frame(card, bg=CARD)
         tools.pack(fill="x", pady=(12, 0))
-        ttk.Button(tools, text="添加联系人…", command=self._add_rule).pack(side="left")
-        ttk.Button(tools, text="删除", width=6,
-                   command=self._remove_rule).pack(side="left", padx=(8, 0))
-        ttk.Button(tools, text="全开", width=6,
-                   command=lambda: self._set_all_rules(True)).pack(side="left", padx=(8, 0))
-        ttk.Button(tools, text="全关", width=6,
-                   command=lambda: self._set_all_rules(False)).pack(side="left", padx=(8, 0))
+        RoundButton(tools, "添加联系人…", self._add_rule).pack(side="left")
+        RoundButton(tools, "删除", self._remove_rule, kind="ghost").pack(side="left", padx=(8, 0))
+        RoundButton(tools, "全开", lambda: self._set_all_rules(True)).pack(side="left", padx=(8, 0))
+        RoundButton(tools, "全关", lambda: self._set_all_rules(False)).pack(side="left", padx=(8, 0))
         tk.Label(tools, text="支持 emoji 名字，改动自动保存", bg=CARD, fg=MUTED,
                  font=FONT_SMALL).pack(side="left", padx=10)
 
@@ -636,7 +928,7 @@ class App(tk.Tk):
         row = self._field_row(card, "组合键")
         self.hotkey_var = tk.StringVar(value=self.cfg.hotkey)
         ttk.Entry(row, textvariable=self.hotkey_var, width=22).pack(side="left")
-        ttk.Button(row, text="应用", command=self._apply_hotkey).pack(side="left", padx=8)
+        RoundButton(row, "应用", self._apply_hotkey).pack(side="left", padx=8)
         self.hotkey_status = tk.Label(row, text="", bg=CARD, fg=ACCENT_DARK, font=FONT_SMALL)
         self.hotkey_status.pack(side="left", padx=6)
 
@@ -665,11 +957,70 @@ class App(tk.Tk):
 
         btns = tk.Frame(card, bg=CARD)
         btns.pack(fill="x", pady=(12, 0))
-        ttk.Button(btns, text="模拟一条消息", command=self._simulate).pack(side="left")
-        ttk.Button(btns, text="打开 Windows 通知设置",
-                   command=lambda: os.startfile("ms-settings:notifications")).pack(side="left", padx=8)
+        RoundButton(btns, "模拟一条消息", self._simulate).pack(side="left")
+        RoundButton(btns, "打开 Windows 通知设置",
+                    lambda: os.startfile("ms-settings:notifications")).pack(side="left", padx=8)
         tk.Label(card, text="每次播报也会追加写入 last_messages.log（在 %APPDATA%\\WeChatDBAlert 下）",
                  bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w").pack(fill="x", pady=(8, 0))
+
+    def _build_theme_page(self, page: tk.Frame) -> None:
+        wrap = tk.Frame(page, bg=BG)
+        wrap.pack(fill="both", expand=True, padx=18, pady=16)
+        card = self._card(wrap, "外观", "选一套配色，点一下立即生效，程序会记住。")
+        row = tk.Frame(card, bg=CARD)
+        row.pack(fill="x", pady=(6, 2))
+        self._theme_tiles: dict[str, tk.Canvas] = {}
+        for key in THEME_ORDER:
+            tile = tk.Canvas(row, width=208, height=142, bg=CARD,
+                             highlightthickness=0, bd=0, cursor="hand2")
+            tile.pack(side="left", padx=(0, 14))
+            self._paint_theme_tile(tile, key)
+            tile.bind("<Button-1>", lambda _e, k=key: self._set_theme(k))
+            self._theme_tiles[key] = tile
+        tk.Label(card, text="换主题会重建界面（未保存的改动会先自动保存）。",
+                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w").pack(fill="x", pady=(10, 0))
+
+    def _paint_theme_tile(self, tile: tk.Canvas, key: str) -> None:
+        t = THEMES[key]
+        active = key == self.cfg.theme
+        tile.delete("all")
+        tile._bg_img = ImageTk.PhotoImage(rounded_image(
+            208, 142, 16, t["bg"], t["accent"] if active else t["border"], 2 if active else 1))
+        tile.create_image(0, 0, anchor="nw", image=tile._bg_img)
+        tile._win_img = ImageTk.PhotoImage(rounded_image(180, 66, 12, t["card"], t["border"]))
+        tile.create_image(14, 14, anchor="nw", image=tile._win_img)
+
+        tile.create_oval(26, 28, 38, 40, fill=t["accent"], outline="")
+        tile.create_rectangle(46, 30, 116, 36, fill=t["text"], outline="")
+        tile.create_rectangle(46, 41, 96, 45, fill=t["muted"], outline="")
+        for i, y in enumerate((52, 60, 68)):
+            tile.create_rectangle(26, y, 182 - i * 18, y + 5, fill=t["field"], outline="")
+        tile.create_text(14, 100, anchor="w", text=t["name"], fill=t["text"], font=FONT_TITLE)
+        tile.create_text(14, 121, anchor="w", text=t["desc"], fill=t["muted"], font=FONT_TINY)
+        if active:
+            tile.create_oval(176, 20, 194, 38, fill=t["accent"], outline="")
+            tile.create_text(185, 29, text="✓", fill=t["on_accent"], font=FONT_SMALL)
+
+    def _set_theme(self, key: str) -> None:
+        if key not in THEMES or key == self.cfg.theme:
+            return
+        self._save(silent=True)
+        self.cfg.theme = key
+        try:
+            self.cfg.save()
+        except OSError:
+            pass
+        self._rebuild()
+
+    def _rebuild(self) -> None:
+        page = getattr(self, "_page", "theme")
+        apply_theme(self.cfg.theme)
+        for child in self.winfo_children():
+            child.destroy()
+        self._setup_style()
+        self._build()
+        self._show_page(page if page in self.pages else "sound")
+        self._dark_title_bar()
 
     # ------------------------------------------------------------- helpers
     def _refresh_sound_list(self) -> None:

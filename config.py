@@ -34,6 +34,8 @@ class Config:
     auto_restore_window: bool = True       # keep WeChat un-minimized so the list stays readable
     stealth_mode: bool = False             # park the WeChat window outside the screen
     full_read: bool = True                 # open long messages to speak the whole text
+    # appearance
+    theme: str = "midnight"                 # midnight | cream | mist
     # hotkey
     hotkey: str = "ctrl+alt+q"
     # runtime
