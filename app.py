@@ -944,9 +944,15 @@ class App(tk.Tk):
         wrap.pack(fill="both", expand=True, padx=14, pady=12)
         card = self._card(wrap, "最近消息", "每次播报（或跳过）都会记录，方便核对名单有没有生效。")
 
+        btns = tk.Frame(card, bg=CARD)
+        btns.pack(side="bottom", fill="x", pady=(8, 0))
+        RoundButton(btns, "模拟一条消息", self._simulate).pack(side="left")
+        RoundButton(btns, "打开 Windows 通知设置",
+                    lambda: os.startfile("ms-settings:notifications")).pack(side="left", padx=8)
+
         box = tk.Frame(card, bg=CARD)
         box.pack(fill="both", expand=True)
-        self.log_box = tk.Listbox(box, height=12, font=FONT_SMALL, relief="flat", bg=FIELD,
+        self.log_box = tk.Listbox(box, height=8, font=FONT_SMALL, relief="flat", bg=FIELD,
                                   fg=TEXT, highlightthickness=1, highlightbackground=BORDER,
                                   highlightcolor=BORDER, activestyle="none",
                                   selectbackground=ACCENT_SOFT, selectforeground=TEXT)
@@ -956,12 +962,6 @@ class App(tk.Tk):
         self.log_box.pack(side="left", fill="both", expand=True)
         self.log_box.insert("end", "还没有记录 —— 来一条微信消息，或点下面的「模拟一条消息」")
         self.log_box.itemconfig(0, foreground=DIM)
-
-        btns = tk.Frame(card, bg=CARD)
-        btns.pack(fill="x", pady=(12, 0))
-        RoundButton(btns, "模拟一条消息", self._simulate).pack(side="left")
-        RoundButton(btns, "打开 Windows 通知设置",
-                    lambda: os.startfile("ms-settings:notifications")).pack(side="left", padx=8)
 
     def _build_theme_page(self, page: tk.Frame) -> None:
         wrap = tk.Frame(page, bg=BG)
@@ -1210,9 +1210,13 @@ class App(tk.Tk):
                 text="正在读取会话…" if not getattr(self, "_session_cache", []) else "没有匹配的会话")
             return
         remind = 0
-        for user, name, unread in rows:
-            on = self.cfg.contact_rules.get(name, self.default_announce_var.get())
-            remind += bool(on)
+        ordered = []
+        for idx, (user, name, unread) in enumerate(rows):
+            on = bool(self.cfg.contact_rules.get(name, self.default_announce_var.get()))
+            remind += on
+            ordered.append((0 if on else 1, idx, user, name, unread, on))
+        ordered.sort()                      # 提醒的置顶，组内保持最近活跃顺序
+        for _rank, _idx, user, name, unread, on in ordered:
             label = name + (f"   {unread}" if unread else "")
             tree.insert("", "end", iid=user,
                         values=("● 提醒" if on else "○ 静音", label),
