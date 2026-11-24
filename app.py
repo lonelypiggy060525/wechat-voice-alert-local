@@ -789,10 +789,10 @@ class App(tk.Tk):
                  wraplength=560).pack(fill="x", pady=(2, 0))
 
         tips = self._card(wrap, "它怎么读到消息的？",
-                          "微信把聊天记录存在本地数据库里（SQLCipher 加密）。程序从微信进程内存里"
-                          "取出主密钥，在内存中解密后直接读库——不截图、不用 OCR、不看界面。")
-        tk.Label(tips, text="所以微信开不开窗口、最小化、关到托盘都无所谓；「谁发的」直接按发送者 "
-                            "wxid 判断，你自己发的消息永远不会被念。全部在本机完成，不上传任何内容。",
+                          "程序直接读取本机已登录账号的消息数据（只读），不截图、不做 OCR、"
+                          "不模拟点击、不控制微信界面。")
+        tk.Label(tips, text="所以微信开不开窗口、最小化、关到托盘都无所谓；「谁发的」按发送者身份"
+                            "判断，你自己发的消息永远不会被念。全部在本机完成，不上传任何内容。",
                  bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w", justify="left",
                  wraplength=560).pack(fill="x")
 
