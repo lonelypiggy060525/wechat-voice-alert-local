@@ -218,6 +218,8 @@ class App(tk.Tk):
 
         self._start_watcher()
         self.after(1200, self._restore_wechat_position)
+        self.after(300, self._dark_title_bar)
+        self.bind("<Map>", lambda _e: self._dark_title_bar())
         self.after(150, self._pump)
         self.after(600, self._mark_dirty)   # persist migrations (e.g. sound library) once
 
@@ -228,6 +230,30 @@ class App(tk.Tk):
             hwnd = wechat_list.find_wechat_window()
             if hwnd:
                 wechat_list.bring_on_screen(hwnd)
+        except Exception:
+            pass
+
+    def _dark_title_bar(self) -> None:
+        """让 Windows 的标题栏也变成深色，和界面连成一片。"""
+        try:
+            try:
+                hwnd = int(self.wm_frame(), 16)   # Tk 给出的顶层窗口句柄
+            except (ValueError, tk.TclError):
+                hwnd = ctypes.windll.user32.GetAncestor(self.winfo_id(), 2)  # GA_ROOT
+            if not hwnd:
+                return
+
+            def ref(color: str) -> int:
+                r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+                return r | (g << 8) | (b << 16)
+
+            on = ctypes.c_int(1)
+            dwm = ctypes.windll.dwmapi
+            dwm.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(on), 4)   # 深色标题栏
+            dwm.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(on), 4)   # 旧版本编号
+            cap, txt = ctypes.c_int(ref(CARD)), ctypes.c_int(ref(TEXT))
+            dwm.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(cap), 4)  # Win11 标题栏底色
+            dwm.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(txt), 4)  # Win11 标题文字
         except Exception:
             pass
     def _setup_style(self) -> None:
