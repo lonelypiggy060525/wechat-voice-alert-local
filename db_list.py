@@ -135,6 +135,7 @@ class DBWatcher(threading.Thread):
         self._names: dict[str, str] = {}
         self._status = ""
         self._seeded = False
+        self._sessions: list[tuple[str, str, int]] = []
         # 兼容旧界面的参数
         self.auto_restore = lambda: False
         self.stealth = lambda: False
@@ -212,6 +213,7 @@ class DBWatcher(threading.Thread):
             return False
 
         new_count = 0
+        snapshot: list[tuple[str, str, int]] = []
         now = time.monotonic()
         sweep = now - getattr(self, "_last_sweep", 0.0) > 15.0
         if sweep:
@@ -221,6 +223,7 @@ class DBWatcher(threading.Thread):
             if not user or user.startswith("gh_") or "brand" in user or "placeholder" in user:
                 continue
             chat = self._chat_name(user, session)
+            snapshot.append((user, chat, int(session.get("unread") or 0)))
             key = (session.get("unread"), str(session.get("summary") or "")[:24])
             prev = self._watch.get(user)
             self._watch[user] = key
@@ -257,9 +260,14 @@ class DBWatcher(threading.Thread):
                 new_count += 1
 
         self._seeded = True
+        self._sessions = snapshot
         self._set_status(f"运行中 · 数据库 · {len(sessions)} 个会话"
                          + (f" · 新消息 {new_count}" if new_count else ""))
         return True
+
+    def sessions(self) -> list[tuple[str, str, int]]:
+        """最近一次轮询看到的会话：[(username, 名称, 未读)]，供设置页直接选用。"""
+        return list(self._sessions)
 
     def _is_mine(self, msg: dict) -> bool:
         try:

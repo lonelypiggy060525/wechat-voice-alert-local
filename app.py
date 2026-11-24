@@ -9,6 +9,7 @@ chat list off the window (PrintWindow + RapidOCR). No injection, no DB access.
 from __future__ import annotations
 
 import ctypes
+import math
 import os
 import queue
 import re
@@ -180,6 +181,16 @@ def icon_image(name: str, color: str, size: int = 16) -> ImageTk.PhotoImage:
         for cx, cy in ((6, 6.4), (10.4, 6), (11, 10.2), (5.6, 10.8)):
             d.ellipse([(cx - 1.1) * u, (cy - 1.1) * u, (cx + 1.1) * u, (cy + 1.1) * u],
                       fill=color)
+    elif name == "gear":
+        d.ellipse([5.2 * u, 5.2 * u, 10.8 * u, 10.8 * u], outline=color, width=lw)
+        for i in range(8):
+            a = i * math.pi / 4
+            cx, cy = 8 * u, 8 * u
+            x1 = cx + math.cos(a) * 4.6 * u
+            y1 = cy + math.sin(a) * 4.6 * u
+            x2 = cx + math.cos(a) * 6.6 * u
+            y2 = cy + math.sin(a) * 6.6 * u
+            d.line([x1, y1, x2, y2], fill=color, width=max(2, int(1.5 * u)))
     elif name == "check":
         d.line([(3 * u, 8.5 * u), (6.6 * u, 12 * u), (13 * u, 4.5 * u)],
                fill=color, width=max(2, int(2.0 * u)))
@@ -315,11 +326,35 @@ class RoundButton(tk.Canvas):
         self._draw()
 
 
+class StatusPill(tk.Canvas):
+    """右上角状态：圆角胶囊 + 状态点。"""
+
+    def __init__(self, parent, text: str = "启动中", ok: bool = True, height: int = 24):
+        super().__init__(parent, width=110, height=height, bg=_bg_of(parent),
+                         highlightthickness=0, bd=0)
+        self._h = height
+        self._photo = None
+        self.set_text(text, ok)
+
+    def set_text(self, text: str, ok: bool = True) -> None:
+        font = tkfont.Font(font=FONT_SMALL)
+        w = font.measure(text) + 38
+        self.configure(width=w, height=self._h)
+        fill, fg = (GREEN_SOFT, GREEN) if ok else (DANGER_SOFT, DANGER)
+        self._photo = ImageTk.PhotoImage(rounded_image(w, self._h, self._h // 2, fill, fill))
+        self.delete("all")
+        self.create_image(0, 0, anchor="nw", image=self._photo)
+        cy = self._h // 2
+        self.create_oval(12, cy - 3, 18, cy + 3, fill=fg, outline="")
+        self.create_text(24, cy, anchor="w", text=text, fill=fg, font=FONT_SMALL)
+
+
 class NavItem(tk.Canvas):
     """侧栏条目：圆角选中块 + 图标 + 文字。"""
 
-    def __init__(self, parent, key: str, text: str, icon: str, on_click):
-        super().__init__(parent, width=180, height=38, bg=_bg_of(parent),
+    def __init__(self, parent, key: str, text: str, icon: str, on_click,
+                 width: int = 180, height: int = 38):
+        super().__init__(parent, width=width, height=height, bg=_bg_of(parent),
                          highlightthickness=0, bd=0, cursor="hand2")
         self.key, self.text, self.icon_name, self.on_click = key, text, icon, on_click
         self._active = False
@@ -348,11 +383,11 @@ class NavItem(tk.Canvas):
             fill, fg = CARD_HOVER, TEXT
         else:
             fill, fg = _bg_of(self.master), MUTED
-        self._photo = ImageTk.PhotoImage(rounded_image(w, h, 10, fill, fill))
+        self._photo = ImageTk.PhotoImage(rounded_image(w, h, 8, fill, fill))
         self.delete("all")
         self.create_image(0, 0, anchor="nw", image=self._photo)
-        self.create_image(14, h // 2, anchor="w", image=icon_image(self.icon_name, fg))
-        self.create_text(38, h // 2, anchor="w", text=self.text, fill=fg, font=FONT_NAV)
+        self.create_image(12, h // 2, anchor="w", image=icon_image(self.icon_name, fg, 14))
+        self.create_text(32, h // 2, anchor="w", text=self.text, fill=fg, font=FONT_SMALL)
 
 # emoji / pictographs / dingbats: OCR never returns these, so they must not count
 _EMOJI_RE = re.compile(
@@ -512,8 +547,8 @@ class App(tk.Tk):
                 self.iconbitmap(ico)
         except Exception:
             pass
-        self.geometry("920x740")
-        self.minsize(860, 680)
+        self.geometry("680x500")
+        self.minsize(640, 460)
         self.configure(bg=BG)
         self._setup_style()
         self._build()
@@ -634,49 +669,42 @@ class App(tk.Tk):
     # ------------------------------------------------------------------ layout
     def _build(self) -> None:
         self.configure(bg=BG)
-        header = tk.Frame(self, bg=CARD, height=72)
+        header = tk.Frame(self, bg=CARD, height=56)
         header.pack(side="top", fill="x")
         header.pack_propagate(False)
         tk.Frame(header, bg=BORDER, height=1).pack(side="bottom", fill="x")
 
-        logo = tk.Canvas(header, width=34, height=34, bg=CARD, highlightthickness=0)
-        logo.pack(side="left", padx=(18, 10), pady=19)
+        logo = tk.Canvas(header, width=28, height=28, bg=CARD, highlightthickness=0)
+        logo.pack(side="left", padx=(16, 10), pady=14)
         logo.create_image(0, 0, anchor="nw",
-                          image=ImageTk.PhotoImage(rounded_image(34, 34, 10, ACCENT, ACCENT)))
-        logo.create_oval(9, 8, 25, 21, fill="white", outline="")
-        logo.create_polygon([12, 19, 12, 26, 19, 20], fill="white", outline="")
+                          image=ImageTk.PhotoImage(rounded_image(28, 28, 8, ACCENT, ACCENT)))
+        logo.create_oval(7, 6, 21, 17, fill="white", outline="")
+        logo.create_polygon([10, 15, 10, 21, 16, 16], fill="white", outline="")
 
-        titles = tk.Frame(header, bg=CARD)
-        titles.pack(side="left", pady=(12, 10))
-        tk.Label(titles, text=APP_TITLE, bg=CARD, fg=TEXT, font=FONT_H1).pack(anchor="w")
-        tk.Label(titles, text="微信来消息 → 自定义提示音 + 语音播报", bg=CARD, fg=MUTED,
-                 font=FONT_SMALL).pack(anchor="w")
+        tk.Label(header, text=APP_TITLE, bg=CARD, fg=TEXT,
+                 font=("Microsoft YaHei UI", 12, "bold")).pack(side="left")
 
-        self.status_label = tk.Label(header, text="● 启动中", bg=CARD_HOVER, fg=MUTED,
-                                     font=FONT_SMALL, padx=12, pady=5)
-        self.status_label.pack(side="right", padx=(0, 18))
+        self.status_label = StatusPill(header, "启动中", True, height=24)
+        self.status_label.pack(side="right", padx=(0, 14))
         self.enabled_var = tk.BooleanVar(value=self.cfg.enabled)
-        self._check(header, "启用提醒", self.enabled_var, self._on_toggle).pack(side="right", padx=14)
+        self._check(header, "启用提醒", self.enabled_var, self._on_toggle).pack(side="right", padx=12)
 
-        footer = tk.Frame(self, bg=CARD, height=58)
+        footer = tk.Frame(self, bg=CARD, height=48)
         footer.pack(side="bottom", fill="x")
         footer.pack_propagate(False)
         tk.Frame(self, bg=BORDER, height=1).pack(side="bottom", fill="x")
 
-        self.autostart_var = tk.BooleanVar(value=autostart_enabled())
-        self._check(footer, "开机自动启动", self.autostart_var, self._on_autostart).pack(
-            side="left", padx=18)
         self.dead_hint = tk.Label(footer, text="", bg=CARD, fg=DANGER, font=FONT_SMALL)
-        self.dead_hint.pack(side="left", padx=6)
+        self.dead_hint.pack(side="left", padx=(16, 4))
         self.save_hint = tk.Label(footer, text="", bg=CARD, fg=MUTED, font=FONT_SMALL)
-        self.save_hint.pack(side="left", padx=6)
-        RoundButton(footer, "保存并应用", lambda: self._save(), kind="primary",
-                    icon="check", height=36).pack(side="right", padx=18, pady=11)
+        self.save_hint.pack(side="left", padx=4)
+        RoundButton(footer, "保存", lambda: self._save(), kind="primary",
+                    icon="check", height=32).pack(side="right", padx=16, pady=8)
 
         body = tk.Frame(self, bg=BG)
         body.pack(side="top", fill="both", expand=True)
 
-        sidebar = tk.Frame(body, bg=BG, width=196)
+        sidebar = tk.Frame(body, bg=BG, width=150)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         tk.Frame(body, bg=BORDER, width=1).pack(side="left", fill="y")
@@ -685,23 +713,19 @@ class App(tk.Tk):
         content.pack(side="left", fill="both", expand=True)
 
         self._nav: dict[str, NavItem] = {}
-        tk.Label(sidebar, text="设置", bg=BG, fg=DIM, font=FONT_TINY,
-                 anchor="w", padx=20, pady=6).pack(fill="x", pady=(12, 2))
         for key, label, icon in (("sound", "提示音", "speaker"),
                                  ("voice", "语音播报", "wave"),
                                  ("filter", "提醒范围", "filter"),
                                  ("hotkey", "快捷键", "key"),
+                                 ("general", "常规", "gear"),
                                  ("recent", "最近消息", "clock"),
                                  ("theme", "外观", "palette")):
-            item = NavItem(sidebar, key, label, icon, self._show_page)
+            item = NavItem(sidebar, key, label, icon, self._show_page, width=134, height=32)
             item.pack(padx=8, pady=1, anchor="w")
             self._nav[key] = item
-        tk.Label(sidebar, text="数据来源：本地数据库\n（不需要微信窗口）", bg=BG,
-                 fg=DIM, font=FONT_TINY, justify="left",
-                 anchor="w", padx=20).pack(side="bottom", fill="x", pady=12)
 
         self.pages: dict[str, tk.Frame] = {}
-        for key in ("sound", "voice", "filter", "hotkey", "recent", "theme"):
+        for key in ("sound", "voice", "filter", "hotkey", "general", "recent", "theme"):
             page = tk.Frame(content, bg=BG)
             self.pages[key] = page
 
@@ -709,6 +733,7 @@ class App(tk.Tk):
         self._build_voice_page(self.pages["voice"])
         self._build_filter_page(self.pages["filter"])
         self._build_hotkey_page(self.pages["hotkey"])
+        self._build_general_page(self.pages["general"])
         self._build_recent_page(self.pages["recent"])
         self._build_theme_page(self.pages["theme"])
         self._show_page("sound")
@@ -722,20 +747,20 @@ class App(tk.Tk):
             item.set_active(name == key)
 
     def _card(self, parent: tk.Frame, title: str, subtitle: str = "") -> tk.Frame:
-        panel = RoundedPanel(parent, radius=16, pad=22)
+        panel = RoundedPanel(parent, radius=16, pad=18)
         panel.pack(fill="x", pady=(0, 14))
         inner = panel.inner
         tk.Label(inner, text=title, bg=CARD, fg=TEXT, font=FONT_TITLE, anchor="w").pack(fill="x")
         if subtitle:
             tk.Label(inner, text=subtitle, bg=CARD, fg=MUTED, font=FONT_SMALL,
-                     anchor="w", justify="left").pack(fill="x", pady=(4, 14))
+                     anchor="w", justify="left").pack(fill="x", pady=(2, 10))
         else:
             tk.Frame(inner, bg=CARD, height=12).pack(fill="x")
         return inner
 
     def _field_row(self, parent: tk.Frame, label: str, width: int = 14) -> tk.Frame:
         row = tk.Frame(parent, bg=CARD)
-        row.pack(fill="x", pady=5)
+        row.pack(fill="x", pady=3)
         tk.Label(row, text=label, bg=CARD, fg=MUTED, font=FONT, width=width, anchor="w").pack(side="left")
         return row
 
@@ -761,9 +786,9 @@ class App(tk.Tk):
     # ------------------------------------------------------------- pages
     def _build_sound_page(self, page: tk.Frame) -> None:
         wrap = tk.Frame(page, bg=BG)
-        wrap.pack(fill="both", expand=True, padx=18, pady=16)
+        wrap.pack(fill="both", expand=True, padx=14, pady=12)
 
-        card = self._card(wrap, "提示音", "来消息时先响这个声音，随后再念出是谁说了什么。")
+        card = self._card(wrap, "提示音", "先响这个声音，再念出谁说了什么。")
         row = self._field_row(card, "音效")
         self.sound_var = tk.StringVar()
         self.sound_box = ttk.Combobox(row, textvariable=self.sound_var, state="readonly", width=30)
@@ -783,24 +808,15 @@ class App(tk.Tk):
         self.sound_hint = tk.Label(card, text="", bg=CARD, fg=MUTED, font=FONT_SMALL,
                                    anchor="w", justify="left")
         self.sound_hint.pack(fill="x", pady=(8, 0))
-        tk.Label(card, text="支持 wav / mp3 / wma；m4a、aac、flac、ogg 首次选择时自动转码。"
-                            "加过的音频会一直保留在列表里。",
+        tk.Label(card, text="支持 wav / mp3 / wma / m4a / aac / flac / ogg（自动转码）。",
                  bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w", justify="left",
-                 wraplength=560).pack(fill="x", pady=(2, 0))
-
-        tips = self._card(wrap, "它怎么读到消息的？",
-                          "程序直接读取本机已登录账号的消息数据（只读），不截图、不做 OCR、"
-                          "不模拟点击、不控制微信界面。")
-        tk.Label(tips, text="所以微信开不开窗口、最小化、关到托盘都无所谓；「谁发的」按发送者身份"
-                            "判断，你自己发的消息永远不会被念。全部在本机完成，不上传任何内容。",
-                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w", justify="left",
-                 wraplength=560).pack(fill="x")
+                 wraplength=520).pack(fill="x", pady=(2, 0))
 
         self._refresh_sound_list()
 
     def _build_voice_page(self, page: tk.Frame) -> None:
         wrap = tk.Frame(page, bg=BG)
-        wrap.pack(fill="both", expand=True, padx=18, pady=16)
+        wrap.pack(fill="both", expand=True, padx=14, pady=12)
         card = self._card(wrap, "语音播报", "把「谁发的、说了什么」念出来。")
 
         self.tts_enabled_var = tk.BooleanVar(value=self.cfg.tts_enabled)
@@ -809,8 +825,8 @@ class App(tk.Tk):
         trow = self._field_row(card, "播报格式")
         self.tpl_var = tk.StringVar(value=self.cfg.tts_template)
         self.tpl_var.trace_add("write", self._mark_dirty)
-        ttk.Entry(trow, textvariable=self.tpl_var, width=44).pack(side="left")
-        tk.Label(card, text="可用占位符：{sender} 发送者　{chat} 会话名　{content} 内容",
+        ttk.Entry(trow, textvariable=self.tpl_var, width=30).pack(side="left")
+        tk.Label(card, text="占位符：{sender} 发送者　{chat} 会话　{content} 内容",
                  bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w").pack(fill="x")
 
         vrow = self._field_row(card, "发音人")
@@ -822,7 +838,7 @@ class App(tk.Tk):
         self.voice_var = tk.StringVar(value=cur_label)
         self.voice_var.trace_add("write", self._mark_dirty)
         ttk.Combobox(vrow, textvariable=self.voice_var, values=labels,
-                     state="readonly", width=32).pack(side="left")
+                     state="readonly", width=26).pack(side="left")
         RoundButton(vrow, "试听", self._preview_tts).pack(side="left", padx=8)
 
         rrow = self._field_row(card, "语速")
@@ -844,85 +860,71 @@ class App(tk.Tk):
         self._on_tts_volume_change(self.tts_vol_slider.get())
 
         btns = tk.Frame(card, bg=CARD)
-        btns.pack(fill="x", pady=(8, 0))
+        btns.pack(fill="x", pady=(6, 0))
         self.full_read_var = tk.BooleanVar(value=self.cfg.full_read)
-        self._check(btns, "朗读完整内容（长消息会打开会话去读，代价是该会话变成已读）",
+        self._check(btns, "朗读完整内容（长消息整段读）",
                     self.full_read_var, self._mark_dirty).pack(anchor="w")
         btns2 = tk.Frame(card, bg=CARD)
-        btns2.pack(fill="x", pady=(10, 0))
+        btns2.pack(fill="x", pady=(6, 0))
         RoundButton(btns2, "停止播报", self._stop_speech).pack(side="left")
-        tk.Label(btns2, text="快捷键也能随时打断", bg=CARD, fg=MUTED,
-                 font=FONT_SMALL).pack(side="left", padx=10)
 
     def _build_filter_page(self, page: tk.Frame) -> None:
         wrap = tk.Frame(page, bg=BG)
-        wrap.pack(fill="both", expand=True, padx=18, pady=16)
-        card = self._card(wrap, "提醒范围", "每个联系人一个开关，点第一列切换；名单外的人按下面的默认处理。")
+        wrap.pack(fill="both", expand=True, padx=14, pady=12)
+        card = self._card(wrap, "提醒范围", "点一下就切换提醒 / 静音；列表来自你的微信会话。")
 
+        top = tk.Frame(card, bg=CARD)
+        top.pack(fill="x")
         self.default_announce_var = tk.BooleanVar(value=self.cfg.default_announce)
-        self._check(card, "名单外的联系人默认提醒", self.default_announce_var,
-                    self._mark_dirty).pack(anchor="w")
+        self._check(top, "新会话默认提醒", self.default_announce_var,
+                    self._mark_dirty).pack(side="left")
+        search = ttk.Entry(top, width=14)
+        search.pack(side="right")
+        self.rule_search_var = tk.StringVar()
+        search.configure(textvariable=self.rule_search_var)
+        search.bind("<KeyRelease>", lambda _e: self._refresh_rules_tree())
+        tk.Label(top, text="搜索", bg=CARD, fg=MUTED, font=FONT_SMALL).pack(side="right", padx=(0, 6))
+
+        tools = tk.Frame(card, bg=CARD)
+        tools.pack(side="bottom", fill="x", pady=(8, 0))
+        RoundButton(tools, "全部提醒", lambda: self._set_all_rules(True)).pack(side="left")
+        RoundButton(tools, "全部静音", lambda: self._set_all_rules(False)).pack(side="left", padx=8)
+        self.rules_hint = tk.Label(tools, text="", bg=CARD, fg=MUTED, font=FONT_SMALL)
+        self.rules_hint.pack(side="left", padx=8)
 
         tree_wrap = tk.Frame(card, bg=CARD)
-        tree_wrap.pack(fill="both", expand=True, pady=(10, 0))
+        tree_wrap.pack(fill="both", expand=True, pady=(8, 0))
         self.rules_tree = ttk.Treeview(tree_wrap, columns=("state", "name"), show="headings",
-                                       height=9, selectmode="browse")
-        self.rules_tree.heading("state", text="提醒")
-        self.rules_tree.heading("name", text="联系人 / 群名（点第一列切换）")
-        self.rules_tree.column("state", width=76, anchor="center", stretch=False)
-        self.rules_tree.column("name", width=420, anchor="w")
+                                       height=6, selectmode="browse")
+        self.rules_tree.heading("state", text="")
+        self.rules_tree.heading("name", text="会话")
+        self.rules_tree.column("state", width=64, anchor="center", stretch=False)
+        self.rules_tree.column("name", width=330, anchor="w")
         scroll = ttk.Scrollbar(tree_wrap, orient="vertical", command=self.rules_tree.yview)
         self.rules_tree.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
         self.rules_tree.pack(side="left", fill="both", expand=True)
         self.rules_tree.tag_configure("off", foreground=DIM)
         self.rules_tree.bind("<Button-1>", self._on_rule_click)
+
+        self._session_cache: list[tuple[str, str, int]] = []
         self._refresh_rules_tree()
+        self._load_sessions_async()
 
-        tools = tk.Frame(card, bg=CARD)
-        tools.pack(fill="x", pady=(12, 0))
-        RoundButton(tools, "添加联系人…", self._add_rule).pack(side="left")
-        RoundButton(tools, "删除", self._remove_rule, kind="ghost").pack(side="left", padx=(8, 0))
-        RoundButton(tools, "全开", lambda: self._set_all_rules(True)).pack(side="left", padx=(8, 0))
-        RoundButton(tools, "全关", lambda: self._set_all_rules(False)).pack(side="left", padx=(8, 0))
-        tk.Label(tools, text="支持 emoji 名字，改动自动保存", bg=CARD, fg=MUTED,
-                 font=FONT_SMALL).pack(side="left", padx=10)
-
-        opts = tk.Frame(card, bg=CARD)
-        opts.pack(fill="x", pady=(14, 0))
+    def _build_general_page(self, page: tk.Frame) -> None:
+        wrap = tk.Frame(page, bg=BG)
+        wrap.pack(fill="both", expand=True, padx=14, pady=12)
+        card = self._card(wrap, "常规", "启动与播报行为。")
+        self.autostart_var = tk.BooleanVar(value=autostart_enabled())
+        self._check(card, "开机自动启动", self.autostart_var, self._on_autostart).pack(
+            anchor="w", pady=2)
         self.skip_focus_var = tk.BooleanVar(value=self.cfg.skip_when_wechat_focused)
-        self._check(opts, "正在看微信时不再播报", self.skip_focus_var,
-                    self._mark_dirty).pack(anchor="w")
-        # UIA 读的是控件树，不依赖窗口是否可见，这两项只为兼容旧配置保留
-        self.auto_restore_var = tk.BooleanVar(value=False)
-        self.stealth_var = tk.BooleanVar(value=False)
-        tk.Label(opts, text="数据库版与窗口无关：微信开着就行，最小化 / 关到托盘 / 不开窗口都能读。",
-                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w").pack(anchor="w", pady=(6, 0))
-
-    def _on_stealth_toggle(self) -> None:
-        self._mark_dirty()
-        hwnd = wechat_list.find_wechat_window()
-        if not hwnd:
-            return
-        if self.stealth_var.get():
-            wechat_list.park_offscreen(hwnd)
-        else:
-            wechat_list.bring_on_screen(hwnd)
-
-    def _bring_wechat_back(self) -> None:
-        hwnd = wechat_list.find_wechat_window()
-        if not hwnd:
-            self._set_status("没找到微信窗口", ok=False)
-            return
-        wechat_list.bring_on_screen(hwnd)
-        if self.stealth_var.get():
-            self.stealth_var.set(False)
-            self._mark_dirty()
-        self._set_status("微信已调回屏幕")
+        self._check(card, "正在看微信时不再播报", self.skip_focus_var, self._mark_dirty).pack(
+            anchor="w", pady=2)
 
     def _build_hotkey_page(self, page: tk.Frame) -> None:
         wrap = tk.Frame(page, bg=BG)
-        wrap.pack(fill="both", expand=True, padx=18, pady=16)
+        wrap.pack(fill="both", expand=True, padx=14, pady=12)
         card = self._card(wrap, "打断快捷键", "播报到一半按一下就能掐断。")
 
         row = self._field_row(card, "组合键")
@@ -935,11 +937,11 @@ class App(tk.Tk):
         tk.Label(card, text="写法示例：ctrl+alt+q、ctrl+shift+F9、alt+space。"
                             "组合键被别的程序占用时会提示，换一个即可。",
                  bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w",
-                 wraplength=560, justify="left").pack(fill="x", pady=(12, 0))
+                 wraplength=500, justify="left").pack(fill="x", pady=(12, 0))
 
     def _build_recent_page(self, page: tk.Frame) -> None:
         wrap = tk.Frame(page, bg=BG)
-        wrap.pack(fill="both", expand=True, padx=18, pady=16)
+        wrap.pack(fill="both", expand=True, padx=14, pady=12)
         card = self._card(wrap, "最近消息", "每次播报（或跳过）都会记录，方便核对名单有没有生效。")
 
         box = tk.Frame(card, bg=CARD)
@@ -960,46 +962,43 @@ class App(tk.Tk):
         RoundButton(btns, "模拟一条消息", self._simulate).pack(side="left")
         RoundButton(btns, "打开 Windows 通知设置",
                     lambda: os.startfile("ms-settings:notifications")).pack(side="left", padx=8)
-        tk.Label(card, text="每次播报也会追加写入 last_messages.log（在 %APPDATA%\\WeChatDBAlert 下）",
-                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w").pack(fill="x", pady=(8, 0))
 
     def _build_theme_page(self, page: tk.Frame) -> None:
         wrap = tk.Frame(page, bg=BG)
-        wrap.pack(fill="both", expand=True, padx=18, pady=16)
-        card = self._card(wrap, "外观", "选一套配色，点一下立即生效，程序会记住。")
+        wrap.pack(fill="both", expand=True, padx=14, pady=12)
+        card = self._card(wrap, "外观", "点一下立即生效，程序会记住。")
         row = tk.Frame(card, bg=CARD)
-        row.pack(fill="x", pady=(6, 2))
+        row.pack(fill="x", pady=(4, 2))
         self._theme_tiles: dict[str, tk.Canvas] = {}
         for key in THEME_ORDER:
-            tile = tk.Canvas(row, width=208, height=142, bg=CARD,
+            tile = tk.Canvas(row, width=150, height=112, bg=CARD,
                              highlightthickness=0, bd=0, cursor="hand2")
-            tile.pack(side="left", padx=(0, 14))
+            tile.pack(side="left", padx=(0, 8))
             self._paint_theme_tile(tile, key)
             tile.bind("<Button-1>", lambda _e, k=key: self._set_theme(k))
             self._theme_tiles[key] = tile
-        tk.Label(card, text="换主题会重建界面（未保存的改动会先自动保存）。",
-                 bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w").pack(fill="x", pady=(10, 0))
 
     def _paint_theme_tile(self, tile: tk.Canvas, key: str) -> None:
         t = THEMES[key]
         active = key == self.cfg.theme
         tile.delete("all")
         tile._bg_img = ImageTk.PhotoImage(rounded_image(
-            208, 142, 16, t["bg"], t["accent"] if active else t["border"], 2 if active else 1))
+            150, 112, 14, t["bg"], t["accent"] if active else t["border"], 2 if active else 1))
         tile.create_image(0, 0, anchor="nw", image=tile._bg_img)
-        tile._win_img = ImageTk.PhotoImage(rounded_image(180, 66, 12, t["card"], t["border"]))
-        tile.create_image(14, 14, anchor="nw", image=tile._win_img)
+        tile._win_img = ImageTk.PhotoImage(rounded_image(124, 50, 10, t["card"], t["border"]))
+        tile.create_image(12, 10, anchor="nw", image=tile._win_img)
 
-        tile.create_oval(26, 28, 38, 40, fill=t["accent"], outline="")
-        tile.create_rectangle(46, 30, 116, 36, fill=t["text"], outline="")
-        tile.create_rectangle(46, 41, 96, 45, fill=t["muted"], outline="")
-        for i, y in enumerate((52, 60, 68)):
-            tile.create_rectangle(26, y, 182 - i * 18, y + 5, fill=t["field"], outline="")
-        tile.create_text(14, 100, anchor="w", text=t["name"], fill=t["text"], font=FONT_TITLE)
-        tile.create_text(14, 121, anchor="w", text=t["desc"], fill=t["muted"], font=FONT_TINY)
+        tile.create_oval(20, 20, 30, 30, fill=t["accent"], outline="")
+        tile.create_rectangle(36, 21, 86, 26, fill=t["text"], outline="")
+        tile.create_rectangle(36, 31, 70, 34, fill=t["muted"], outline="")
+        for i, y in enumerate((40, 46, 52)):
+            tile.create_rectangle(20, y, 124 - i * 14, y + 4, fill=t["field"], outline="")
+        tile.create_text(12, 74, anchor="w", text=t["name"], fill=t["text"],
+                         font=("Microsoft YaHei UI", 10, "bold"))
+        tile.create_text(12, 94, anchor="w", text=t["desc"], fill=t["muted"], font=FONT_TINY)
         if active:
-            tile.create_oval(176, 20, 194, 38, fill=t["accent"], outline="")
-            tile.create_text(185, 29, text="✓", fill=t["on_accent"], font=FONT_SMALL)
+            tile.create_oval(126, 12, 142, 28, fill=t["accent"], outline="")
+            tile.create_text(134, 20, text="✓", fill=t["on_accent"], font=("Microsoft YaHei UI", 8))
 
     def _set_theme(self, key: str) -> None:
         if key not in THEMES or key == self.cfg.theme:
@@ -1156,10 +1155,12 @@ class App(tk.Tk):
             messagebox.showerror(APP_TITLE, f"设置开机自启失败：{exc}")
 
     def _set_status(self, text: str, color: str = ACCENT_DARK, ok: bool = True) -> None:
-        if color == DANGER or color.startswith("#c0"):
+        if color == DANGER or str(color).startswith("#c0"):
             ok = False
-        self.status_label.configure(text=f"● {text}", bg=GREEN_SOFT if ok else DANGER_SOFT,
-                                    fg=GREEN if ok else DANGER)
+        try:
+            self.status_label.set_text(text, ok)
+        except Exception:
+            pass
 
     # --------------------------------------------------------------- filter
     def _match_rule(self, chat: str, sender: str):
@@ -1181,14 +1182,42 @@ class App(tk.Tk):
         return self.default_announce_var.get()
 
     # ---------------------------------------------------------------- rules
+    def _load_sessions_async(self) -> None:
+        """等监视器拿到会话列表后，把它们灌进「提醒范围」。"""
+        def work():
+            for _ in range(120):
+                watcher = getattr(self, "watcher", None)
+                if watcher is not None:
+                    snap = watcher.sessions()
+                    if snap:
+                        self.queue.put(("sessions", snap))
+                        return
+                time.sleep(0.5)
+            self.queue.put(("sessions", []))
+        threading.Thread(target=work, daemon=True).start()
+
     def _refresh_rules_tree(self) -> None:
-        for iid in self.rules_tree.get_children():
-            self.rules_tree.delete(iid)
-        items = sorted(self.cfg.contact_rules.items(), key=lambda kv: (not kv[1], kv[0].casefold()))
-        for name, on in items:
-            self.rules_tree.insert("", "end", iid=name,
-                                   values=("● 提醒" if on else "○ 不提醒", name),
-                                   tags=() if on else ("off",))
+        tree = getattr(self, "rules_tree", None)
+        if tree is None or not tree.winfo_exists():
+            return
+        for iid in tree.get_children():
+            tree.delete(iid)
+        query = normalize_name(self.rule_search_var.get()) if hasattr(self, "rule_search_var") else ""
+        rows = [(u, n, c) for (u, n, c) in getattr(self, "_session_cache", [])
+                if not query or query in normalize_name(n)]
+        if not rows:
+            self.rules_hint.configure(
+                text="正在读取会话…" if not getattr(self, "_session_cache", []) else "没有匹配的会话")
+            return
+        remind = 0
+        for user, name, unread in rows:
+            on = self.cfg.contact_rules.get(name, self.default_announce_var.get())
+            remind += bool(on)
+            label = name + (f"   {unread}" if unread else "")
+            tree.insert("", "end", iid=user,
+                        values=("● 提醒" if on else "○ 静音", label),
+                        tags=() if on else ("off",))
+        self.rules_hint.configure(text=f"{remind}/{len(rows)} 个提醒")
 
     def _on_rule_click(self, event):
         if self.rules_tree.identify_region(event.x, event.y) != "cell":
@@ -1198,45 +1227,22 @@ class App(tk.Tk):
         iid = self.rules_tree.identify_row(event.y)
         if not iid:
             return None
-        self.cfg.contact_rules[iid] = not self.cfg.contact_rules.get(iid, True)
+        name = next((n for u, n, _c in self._session_cache if u == iid), None)
+        if not name:
+            return None
+        current = self.cfg.contact_rules.get(name, self.default_announce_var.get())
+        self.cfg.contact_rules[name] = not current
         self._refresh_rules_tree()
-        self.rules_tree.selection_set(iid)
-        state = "提醒" if self.cfg.contact_rules[iid] else "不提醒"
-        append_log(f"名单: {iid} → {state}")
         self._mark_dirty()
         return "break"
 
-    def _add_rule(self) -> None:
-        name = simpledialog.askstring(APP_TITLE, "输入聊天名或发送者名（可含 emoji）：", parent=self)
-        if not name or not name.strip():
-            return
-        name = name.strip()
-        if name in self.cfg.contact_rules:
-            messagebox.showinfo(APP_TITLE, f"「{name}」已在名单里，直接点第一列切换就行。")
-            return
-        self.cfg.contact_rules[name] = True
-        self._refresh_rules_tree()
-        self.rules_tree.selection_set(name)
-        self.rules_tree.see(name)
-        append_log(f"名单: 新增 {name} → 提醒")
-        self._mark_dirty()
-
-    def _remove_rule(self) -> None:
-        selected = self.rules_tree.selection()
-        if not selected:
-            messagebox.showinfo(APP_TITLE, "先在列表里选中一行。")
-            return
-        for iid in selected:
-            self.cfg.contact_rules.pop(iid, None)
-            append_log(f"名单: 删除 {iid}")
-        self._refresh_rules_tree()
-        self._mark_dirty()
-
     def _set_all_rules(self, on: bool) -> None:
-        for name in list(self.cfg.contact_rules):
+        query = normalize_name(self.rule_search_var.get()) if hasattr(self, "rule_search_var") else ""
+        for _user, name, _unread in getattr(self, "_session_cache", []):
+            if query and query not in normalize_name(name):
+                continue
             self.cfg.contact_rules[name] = on
         self._refresh_rules_tree()
-        append_log(f"名单: 全部设为{'提醒' if on else '不提醒'}")
         self._mark_dirty()
 
     # -------------------------------------------------------------- runtime
@@ -1246,10 +1252,7 @@ class App(tk.Tk):
         self.watcher = wechat_list.ChatListWatcher(
             lambda m: self.queue.put(("msg", m)),
             lambda s: self.queue.put(("status", s)),
-            max(0.6, self.cfg.poll_interval_ms / 1000),
-            lambda: self.auto_restore_var.get(),
-            lambda: self.stealth_var.get(),
-            lambda: self.full_read_var.get())
+            max(0.6, self.cfg.poll_interval_ms / 1000))
         self.watcher.start()
 
     def _pump(self) -> None:
@@ -1265,6 +1268,9 @@ class App(tk.Tk):
                         self.dead_hint.configure(text="微信未登录")
                     elif "运行中" in payload:
                         self.dead_hint.configure(text="")
+                elif kind == "sessions":
+                    self._session_cache = list(payload or [])
+                    self._refresh_rules_tree()
                 elif kind == "stop":
                     self._stop_speech()
                     self._flash_hotkey()
@@ -1409,8 +1415,6 @@ class App(tk.Tk):
         self.cfg.tts_volume = int(self.tts_vol_slider.get())
         self.cfg.default_announce = self.default_announce_var.get()
         self.cfg.skip_when_wechat_focused = self.skip_focus_var.get()
-        self.cfg.auto_restore_window = self.auto_restore_var.get()
-        self.cfg.stealth_mode = self.stealth_var.get()
         self.cfg.full_read = self.full_read_var.get()
         self.cfg.hotkey = self.hotkey_var.get().strip() or self.cfg.hotkey
 
