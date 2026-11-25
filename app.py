@@ -336,6 +336,55 @@ class RoundButton(tk.Canvas):
         self._draw()
 
 
+class CheckBox(tk.Canvas):
+    """自绘复选框：圆角小方块 + 对勾，随缩放走，比原生 Tk 的好看。"""
+
+    def __init__(self, parent, text: str, variable, command=None):
+        font = tkfont.Font(font=FONT)
+        self._box = px(16)
+        w = self._box + px(8) + font.measure(text) + px(2)
+        h = max(px(22), font.metrics("linespace") + px(4))
+        super().__init__(parent, width=w, height=h, bg=_bg_of(parent),
+                         highlightthickness=0, bd=0, cursor="hand2")
+        self.var, self.text, self.command = variable, text, command
+        self._hover = False
+        self._photo = None
+        variable.trace_add("write", lambda *_: self._draw())
+        self.bind("<Button-1>", self._toggle)
+        self.bind("<Enter>", lambda _e: self._set_hover(True))
+        self.bind("<Leave>", lambda _e: self._set_hover(False))
+        self._draw()
+
+    def _toggle(self, _event=None) -> None:
+        self.var.set(not bool(self.var.get()))
+        if self.command:
+            self.command()
+
+    def _set_hover(self, on: bool) -> None:
+        if on != self._hover:
+            self._hover = on
+            self._draw()
+
+    def _draw(self) -> None:
+        checked = bool(self.var.get())
+        h = int(self["height"])
+        box = self._box
+        y0 = (h - box) // 2
+        if checked:
+            fill, border = ACCENT, ACCENT
+        else:
+            fill = mix(CARD, TEXT, 0.10 if self._hover else 0.06)
+            border = mix(CARD, TEXT, 0.30 if self._hover else 0.20)
+        self._photo = ImageTk.PhotoImage(rounded_image(box, box, px(4), fill, border))
+        self.delete("all")
+        self.create_image(0, y0, anchor="nw", image=self._photo)
+        if checked:
+            self.create_image(box // 2, y0 + box // 2, anchor="center",
+                              image=icon_image("check", ON_ACCENT, px(11)))
+        self.create_text(box + px(8), h // 2, anchor="w", text=self.text,
+                         fill=TEXT, font=FONT)
+
+
 class StatusPill(tk.Canvas):
     """右上角状态：圆角胶囊 + 状态点。"""
 
@@ -791,11 +840,8 @@ class App(tk.Tk):
         tk.Label(row, text=label, bg=CARD, fg=MUTED, font=FONT, width=width, anchor="w").pack(side="left")
         return row
 
-    def _check(self, parent: tk.Frame, text: str, var: tk.BooleanVar, command=None) -> tk.Checkbutton:
-        return tk.Checkbutton(parent, text=text, variable=var, command=command,
-                              bg=CARD, fg=TEXT, font=FONT, bd=0, highlightthickness=0,
-                              activebackground=CARD, activeforeground=TEXT,
-                              selectcolor=FIELD, anchor="w", cursor="hand2")
+    def _check(self, parent: tk.Frame, text: str, var: tk.BooleanVar, command=None) -> tk.Canvas:
+        return CheckBox(parent, text, var, command)
 
     def _on_volume_change(self, value: float) -> None:
         self.vol_label.configure(text=f"{int(value * 100)}%")

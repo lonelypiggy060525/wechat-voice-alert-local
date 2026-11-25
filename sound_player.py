@@ -30,6 +30,7 @@ BUILTIN_SOUNDS = [
     ("water_drop", "水滴"),
     ("soft_ping", "轻点 (最短)"),
     ("wooden_tap", "木鱼扣击"),
+    ("f1_start", "F1 起步"),
 ]
 
 
@@ -38,8 +39,12 @@ def resolve_sound(value: str) -> str | None:
     if not value:
         return None
     if value.startswith("builtin:"):
-        path = os.path.join(BUILTIN_DIR, value.split(":", 1)[1] + ".wav")
-        return path if os.path.exists(path) else None
+        name = value.split(":", 1)[1]
+        for ext in (".wav", ".mp3", ".m4a", ".flac", ".ogg"):
+            path = os.path.join(BUILTIN_DIR, name + ext)
+            if os.path.exists(path):
+                return path
+        return None
     return value if os.path.exists(value) else None
 
 
