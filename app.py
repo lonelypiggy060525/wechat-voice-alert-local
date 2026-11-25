@@ -63,6 +63,14 @@ THEMES = {
 }
 THEME_ORDER = ["midnight", "cream", "mist"]
 
+# 界面缩放：字体是按点算的（Tk 会随 DPI 放大），所以像素尺寸也要跟着放大，
+# 否则高 DPI 屏幕上字变大了、框子还是原尺寸，就会挤在一起。
+SCALE = 1.0
+
+
+def px(value: float) -> int:
+    return max(1, int(round(value * SCALE)))
+
 # 运行期颜色（apply_theme 填充；换主题时整窗重建）
 BG = "#0D0D10"
 CARD = "#151518"
@@ -214,6 +222,7 @@ class RoundedPanel(tk.Frame):
 
     def __init__(self, parent, radius: int = 16, pad: int = 20,
                  fill: str | None = None, border: str | None = None, bg: str | None = None):
+        radius, pad = px(radius), px(pad)
         bg = bg or _bg_of(parent)
         super().__init__(parent, bg=bg)
         self._fill, self._border, self._radius = fill or CARD, border or BORDER, radius
@@ -250,6 +259,7 @@ class RoundButton(tk.Canvas):
     def __init__(self, parent, text: str, command=None, kind: str = "secondary",
                  icon: str | None = None, height: int = 34, pad_x: int = 16,
                  radius: int = 10, width: int | None = None, font=None):
+        height, pad_x, radius = px(height), px(pad_x), px(radius)
         bg = _bg_of(parent)
         self._kind = kind
         self._text = text
@@ -262,8 +272,8 @@ class RoundButton(tk.Canvas):
         self._hover = False
         self._pressed = False
         tw = tkfont.Font(font=self._font).measure(text)
-        self._iw = 18 if icon else 0
-        w = width or (tw + self._pad_x * 2 + (self._iw + 6 if icon else 0))
+        self._iw = px(18) if icon else 0
+        w = width or (tw + self._pad_x * 2 + (self._iw + px(6) if icon else 0))
         super().__init__(parent, width=w, height=height, bg=bg,
                          highlightthickness=0, bd=0, cursor="hand2")
         self._photo = None
@@ -298,8 +308,8 @@ class RoundButton(tk.Canvas):
         self.create_image(0, 0, anchor="nw", image=self._photo)
         x = self._pad_x
         if self._icon_name:
-            self.create_image(x, h // 2, anchor="w", image=icon_image(self._icon_name, fg))
-            x += self._iw + 6
+            self.create_image(x, h // 2, anchor="w", image=icon_image(self._icon_name, fg, px(16)))
+            x += self._iw + px(6)
         self.create_text(x, h // 2, anchor="w", text=self._text, fill=fg, font=self._font)
 
     def _set_hover(self, on: bool) -> None:
@@ -330,7 +340,8 @@ class StatusPill(tk.Canvas):
     """右上角状态：圆角胶囊 + 状态点。"""
 
     def __init__(self, parent, text: str = "启动中", ok: bool = True, height: int = 24):
-        super().__init__(parent, width=110, height=height, bg=_bg_of(parent),
+        height = px(height)
+        super().__init__(parent, width=px(110), height=height, bg=_bg_of(parent),
                          highlightthickness=0, bd=0)
         self._h = height
         self._photo = None
@@ -338,15 +349,15 @@ class StatusPill(tk.Canvas):
 
     def set_text(self, text: str, ok: bool = True) -> None:
         font = tkfont.Font(font=FONT_SMALL)
-        w = font.measure(text) + 38
+        w = font.measure(text) + px(38)
         self.configure(width=w, height=self._h)
         fill, fg = (GREEN_SOFT, GREEN) if ok else (DANGER_SOFT, DANGER)
         self._photo = ImageTk.PhotoImage(rounded_image(w, self._h, self._h // 2, fill, fill))
         self.delete("all")
         self.create_image(0, 0, anchor="nw", image=self._photo)
         cy = self._h // 2
-        self.create_oval(12, cy - 3, 18, cy + 3, fill=fg, outline="")
-        self.create_text(24, cy, anchor="w", text=text, fill=fg, font=FONT_SMALL)
+        self.create_oval(px(12), cy - px(3), px(18), cy + px(3), fill=fg, outline="")
+        self.create_text(px(24), cy, anchor="w", text=text, fill=fg, font=FONT_SMALL)
 
 
 class NavItem(tk.Canvas):
@@ -354,6 +365,7 @@ class NavItem(tk.Canvas):
 
     def __init__(self, parent, key: str, text: str, icon: str, on_click,
                  width: int = 180, height: int = 38):
+        width, height = px(width), px(height)
         super().__init__(parent, width=width, height=height, bg=_bg_of(parent),
                          highlightthickness=0, bd=0, cursor="hand2")
         self.key, self.text, self.icon_name, self.on_click = key, text, icon, on_click
@@ -383,11 +395,11 @@ class NavItem(tk.Canvas):
             fill, fg = CARD_HOVER, TEXT
         else:
             fill, fg = _bg_of(self.master), MUTED
-        self._photo = ImageTk.PhotoImage(rounded_image(w, h, 8, fill, fill))
+        self._photo = ImageTk.PhotoImage(rounded_image(w, h, px(8), fill, fill))
         self.delete("all")
         self.create_image(0, 0, anchor="nw", image=self._photo)
-        self.create_image(12, h // 2, anchor="w", image=icon_image(self.icon_name, fg, 14))
-        self.create_text(32, h // 2, anchor="w", text=self.text, fill=fg, font=FONT_SMALL)
+        self.create_image(px(12), h // 2, anchor="w", image=icon_image(self.icon_name, fg, px(14)))
+        self.create_text(px(32), h // 2, anchor="w", text=self.text, fill=fg, font=FONT_SMALL)
 
 # emoji / pictographs / dingbats: OCR never returns these, so they must not count
 _EMOJI_RE = re.compile(
@@ -461,6 +473,7 @@ class Slider(tk.Canvas):
     def __init__(self, parent, minimum: float, maximum: float, value: float,
                  on_change=None, width: int = 260, height: int = 26,
                  step: float | None = None) -> None:
+        width, height = px(width), px(height)
         super().__init__(parent, width=width, height=height, bg=CARD,
                          highlightthickness=0, cursor="hand2")
         self._min, self._max = minimum, maximum
@@ -468,7 +481,7 @@ class Slider(tk.Canvas):
         self._value = min(max(value, minimum), maximum)
         self._on_change = on_change
         self._cw, self._ch = width, height
-        self._pad = 9
+        self._pad = px(9)
         self.bind("<Button-1>", self._on_drag)
         self.bind("<B1-Motion>", self._on_drag)
         self._draw()
@@ -503,17 +516,31 @@ class Slider(tk.Canvas):
 
     def _draw(self) -> None:
         self.delete("all")
-        y = self._ch - 9
-        round_rect(self, 0, y - 3, self._cw, y + 3, 3, fill=mix(CARD, TEXT, 0.14), outline="")
+        y = self._ch - px(9)
+        round_rect(self, 0, y - px(3), self._cw, y + px(3), px(3), fill=mix(CARD, TEXT, 0.14), outline="")
         x = self._x_of(self._value)
         if x > 2:
-            round_rect(self, 0, y - 3, x, y + 3, 3, fill=ACCENT, outline="")
-        self.create_oval(x - 8, y - 8, x + 8, y + 8, fill=CARD, outline=ACCENT, width=2)
+            round_rect(self, 0, y - px(3), x, y + px(3), px(3), fill=ACCENT, outline="")
+        self.create_oval(x - px(8), y - px(8), x + px(8), y + px(8), fill=CARD, outline=ACCENT, width=px(2))
 
 
 class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
+        global SCALE
+        forced = os.environ.get("WCA_UI_SCALE")
+        if forced:
+            try:
+                SCALE = max(0.8, min(3.0, float(forced)))
+                self.tk.call("tk", "scaling", 96.0 * SCALE / 72.0)
+            except ValueError:
+                SCALE = 1.0
+        else:
+            try:
+                dpi = float(self.tk.call("tk", "scaling")) * 72.0
+                SCALE = max(1.0, min(3.0, dpi / 96.0))
+            except Exception:
+                SCALE = 1.0
         self.cfg = Config.load()
         apply_theme(self.cfg.theme)
         if "--theme" in sys.argv:            # 截图/调试用：--theme cream
@@ -547,8 +574,8 @@ class App(tk.Tk):
                 self.iconbitmap(ico)
         except Exception:
             pass
-        self.geometry("680x500")
-        self.minsize(640, 460)
+        self.geometry(f"{px(680)}x{px(500)}")
+        self.minsize(px(640), px(460))
         self.configure(bg=BG)
         self._setup_style()
         self._build()
@@ -652,7 +679,7 @@ class App(tk.Tk):
                   arrowcolor=[("active", ACCENT)])
         style.configure("Horizontal.TScale", background=CARD, troughcolor="#242429", borderwidth=0)
         style.configure("Treeview", background=FIELD, fieldbackground=FIELD, foreground=TEXT,
-                        rowheight=28, borderwidth=0, font=FONT,
+                        rowheight=px(28), borderwidth=0, font=FONT,
                         bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
         style.configure("Treeview.Heading", background=mix(CARD, TEXT, 0.03), foreground=MUTED,
                         font=FONT_SMALL, relief="flat", borderwidth=0)
@@ -669,42 +696,42 @@ class App(tk.Tk):
     # ------------------------------------------------------------------ layout
     def _build(self) -> None:
         self.configure(bg=BG)
-        header = tk.Frame(self, bg=CARD, height=56)
+        header = tk.Frame(self, bg=CARD, height=px(56))
         header.pack(side="top", fill="x")
         header.pack_propagate(False)
         tk.Frame(header, bg=BORDER, height=1).pack(side="bottom", fill="x")
 
-        logo = tk.Canvas(header, width=28, height=28, bg=CARD, highlightthickness=0)
-        logo.pack(side="left", padx=(16, 10), pady=14)
+        logo = tk.Canvas(header, width=px(28), height=px(28), bg=CARD, highlightthickness=0)
+        logo.pack(side="left", padx=(px(16), px(10)), pady=px(14))
         logo.create_image(0, 0, anchor="nw",
-                          image=ImageTk.PhotoImage(rounded_image(28, 28, 8, ACCENT, ACCENT)))
-        logo.create_oval(7, 6, 21, 17, fill="white", outline="")
-        logo.create_polygon([10, 15, 10, 21, 16, 16], fill="white", outline="")
+                          image=ImageTk.PhotoImage(rounded_image(px(28), px(28), px(8), ACCENT, ACCENT)))
+        logo.create_oval(px(7), px(6), px(21), px(17), fill="white", outline="")
+        logo.create_polygon([px(10), px(15), px(10), px(21), px(16), px(16)], fill="white", outline="")
 
         tk.Label(header, text=APP_TITLE, bg=CARD, fg=TEXT,
                  font=("Microsoft YaHei UI", 12, "bold")).pack(side="left")
 
         self.status_label = StatusPill(header, "启动中", True, height=24)
-        self.status_label.pack(side="right", padx=(0, 14))
+        self.status_label.pack(side="right", padx=(0, px(14)))
         self.enabled_var = tk.BooleanVar(value=self.cfg.enabled)
-        self._check(header, "启用提醒", self.enabled_var, self._on_toggle).pack(side="right", padx=12)
+        self._check(header, "启用提醒", self.enabled_var, self._on_toggle).pack(side="right", padx=px(12))
 
-        footer = tk.Frame(self, bg=CARD, height=48)
+        footer = tk.Frame(self, bg=CARD, height=px(48))
         footer.pack(side="bottom", fill="x")
         footer.pack_propagate(False)
         tk.Frame(self, bg=BORDER, height=1).pack(side="bottom", fill="x")
 
         self.dead_hint = tk.Label(footer, text="", bg=CARD, fg=DANGER, font=FONT_SMALL)
-        self.dead_hint.pack(side="left", padx=(16, 4))
+        self.dead_hint.pack(side="left", padx=(px(16), px(4)))
         self.save_hint = tk.Label(footer, text="", bg=CARD, fg=MUTED, font=FONT_SMALL)
         self.save_hint.pack(side="left", padx=4)
         RoundButton(footer, "保存", lambda: self._save(), kind="primary",
-                    icon="check", height=32).pack(side="right", padx=16, pady=8)
+                    icon="check", height=32).pack(side="right", padx=px(16), pady=px(8))
 
         body = tk.Frame(self, bg=BG)
         body.pack(side="top", fill="both", expand=True)
 
-        sidebar = tk.Frame(body, bg=BG, width=150)
+        sidebar = tk.Frame(body, bg=BG, width=px(150))
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
         tk.Frame(body, bg=BORDER, width=1).pack(side="left", fill="y")
@@ -721,7 +748,7 @@ class App(tk.Tk):
                                  ("recent", "最近消息", "clock"),
                                  ("theme", "外观", "palette")):
             item = NavItem(sidebar, key, label, icon, self._show_page, width=134, height=32)
-            item.pack(padx=8, pady=1, anchor="w")
+            item.pack(padx=px(8), pady=px(1), anchor="w")
             self._nav[key] = item
 
         self.pages: dict[str, tk.Frame] = {}
@@ -898,8 +925,8 @@ class App(tk.Tk):
                                        height=6, selectmode="browse")
         self.rules_tree.heading("state", text="")
         self.rules_tree.heading("name", text="会话")
-        self.rules_tree.column("state", width=64, anchor="center", stretch=False)
-        self.rules_tree.column("name", width=330, anchor="w")
+        self.rules_tree.column("state", width=px(64), anchor="center", stretch=False)
+        self.rules_tree.column("name", width=px(330), anchor="w")
         scroll = ttk.Scrollbar(tree_wrap, orient="vertical", command=self.rules_tree.yview)
         self.rules_tree.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
@@ -937,7 +964,7 @@ class App(tk.Tk):
         tk.Label(card, text="写法示例：ctrl+alt+q、ctrl+shift+F9、alt+space。"
                             "组合键被别的程序占用时会提示，换一个即可。",
                  bg=CARD, fg=MUTED, font=FONT_SMALL, anchor="w",
-                 wraplength=500, justify="left").pack(fill="x", pady=(12, 0))
+                 wraplength=px(500), justify="left").pack(fill="x", pady=(12, 0))
 
     def _build_recent_page(self, page: tk.Frame) -> None:
         wrap = tk.Frame(page, bg=BG)
@@ -971,7 +998,7 @@ class App(tk.Tk):
         row.pack(fill="x", pady=(4, 2))
         self._theme_tiles: dict[str, tk.Canvas] = {}
         for key in THEME_ORDER:
-            tile = tk.Canvas(row, width=150, height=112, bg=CARD,
+            tile = tk.Canvas(row, width=px(150), height=px(112), bg=CARD,
                              highlightthickness=0, bd=0, cursor="hand2")
             tile.pack(side="left", padx=(0, 8))
             self._paint_theme_tile(tile, key)
@@ -983,22 +1010,22 @@ class App(tk.Tk):
         active = key == self.cfg.theme
         tile.delete("all")
         tile._bg_img = ImageTk.PhotoImage(rounded_image(
-            150, 112, 14, t["bg"], t["accent"] if active else t["border"], 2 if active else 1))
+            px(150), px(112), px(14), t["bg"], t["accent"] if active else t["border"], px(2) if active else 1))
         tile.create_image(0, 0, anchor="nw", image=tile._bg_img)
-        tile._win_img = ImageTk.PhotoImage(rounded_image(124, 50, 10, t["card"], t["border"]))
-        tile.create_image(12, 10, anchor="nw", image=tile._win_img)
+        tile._win_img = ImageTk.PhotoImage(rounded_image(px(124), px(50), px(10), t["card"], t["border"]))
+        tile.create_image(px(12), px(10), anchor="nw", image=tile._win_img)
 
-        tile.create_oval(20, 20, 30, 30, fill=t["accent"], outline="")
-        tile.create_rectangle(36, 21, 86, 26, fill=t["text"], outline="")
-        tile.create_rectangle(36, 31, 70, 34, fill=t["muted"], outline="")
-        for i, y in enumerate((40, 46, 52)):
-            tile.create_rectangle(20, y, 124 - i * 14, y + 4, fill=t["field"], outline="")
-        tile.create_text(12, 74, anchor="w", text=t["name"], fill=t["text"],
+        tile.create_oval(px(20), px(20), px(30), px(30), fill=t["accent"], outline="")
+        tile.create_rectangle(px(36), px(21), px(86), px(26), fill=t["text"], outline="")
+        tile.create_rectangle(px(36), px(31), px(70), px(34), fill=t["muted"], outline="")
+        for i, y in enumerate((px(40), px(46), px(52))):
+            tile.create_rectangle(px(20), y, px(124 - i * 14), y + px(4), fill=t["field"], outline="")
+        tile.create_text(px(12), px(74), anchor="w", text=t["name"], fill=t["text"],
                          font=("Microsoft YaHei UI", 10, "bold"))
-        tile.create_text(12, 94, anchor="w", text=t["desc"], fill=t["muted"], font=FONT_TINY)
+        tile.create_text(px(12), px(94), anchor="w", text=t["desc"], fill=t["muted"], font=FONT_TINY)
         if active:
-            tile.create_oval(126, 12, 142, 28, fill=t["accent"], outline="")
-            tile.create_text(134, 20, text="✓", fill=t["on_accent"], font=("Microsoft YaHei UI", 8))
+            tile.create_oval(px(126), px(12), px(142), px(28), fill=t["accent"], outline="")
+            tile.create_text(px(134), px(20), text="✓", fill=t["on_accent"], font=("Microsoft YaHei UI", 8))
 
     def _set_theme(self, key: str) -> None:
         if key not in THEMES or key == self.cfg.theme:
